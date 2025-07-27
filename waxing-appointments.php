@@ -3,7 +3,7 @@
  * Plugin Name: Waxing Appointments
  * Plugin URI: https://difusal.com
  * Description: Simple appointment booking system for waxing services with WooCommerce integration
- * Version: 1.1.3
+ * Version: 1.1.5
  * Author: Difusal
  * License: GPL v2 or later
  * Requires at least: 5.0
@@ -51,6 +51,8 @@ class WaxingAppointments {
         add_action('wp_ajax_nopriv_check_time_slot_status', array($this, 'handle_check_time_slot_status'));
         add_action('wp_ajax_debug_calendar_session', array($this, 'handle_debug_calendar_session'));
         add_action('wp_ajax_nopriv_debug_calendar_session', array($this, 'handle_debug_calendar_session'));
+        add_action('wp_ajax_fix_missing_time_slots', array($this, 'handle_fix_missing_time_slots'));
+        add_action('wp_ajax_nopriv_fix_missing_time_slots', array($this, 'handle_fix_missing_time_slots'));
         
         // WooCommerce hooks for dynamic pricing
         add_action('woocommerce_before_calculate_totals', array($this, 'set_cart_item_price'));
@@ -117,13 +119,14 @@ class WaxingAppointments {
         dbDelta($availability_sql);
         
         $this->populate_default_availability();
+        $this->fix_missing_time_slots();
     }
     
     private function populate_default_availability() {
         global $wpdb;
         $availability_table = $wpdb->prefix . 'waxing_availability';
         
-        $time_slots = array('09:00:00', '10:00:00', '11:00:00', '12:00:00', '14:00:00', '15:00:00', '16:00:00', '17:00:00');
+        $time_slots = array('09:00:00', '10:00:00', '11:00:00', '12:00:00', '13:00:00', '14:00:00', '15:00:00', '16:00:00', '17:00:00');
         
         for ($i = 0; $i < 60; $i++) {
             $date = date('Y-m-d', strtotime("+$i days"));
@@ -140,6 +143,38 @@ class WaxingAppointments {
                         array('%s', '%s', '%d')
                     );
                 }
+            }
+        }
+    }
+    
+    private function fix_missing_time_slots() {
+        global $wpdb;
+        $availability_table = $wpdb->prefix . 'waxing_availability';
+        
+        // Check if 13:00:00 slots are missing and add them
+        $missing_slots = $wpdb->get_results($wpdb->prepare(
+            "SELECT DISTINCT date FROM $availability_table 
+             WHERE date NOT IN (
+                 SELECT date FROM $availability_table WHERE time_slot = %s
+             ) 
+             AND date >= %s 
+             AND DAYOFWEEK(date) BETWEEN 2 AND 6
+             ORDER BY date",
+            '13:00:00',
+            date('Y-m-d')
+        ));
+        
+        if (!empty($missing_slots)) {
+            foreach ($missing_slots as $slot) {
+                $wpdb->insert(
+                    $availability_table,
+                    array(
+                        'date' => $slot->date,
+                        'time_slot' => '13:00:00',
+                        'is_available' => 1
+                    ),
+                    array('%s', '%s', '%d')
+                );
             }
         }
     }
@@ -1167,8 +1202,12 @@ class WaxingAppointments {
                 
                 <div style="margin-top: 20px; padding: 15px; background: #fff3cd; border: 1px solid #ffeaa7; border-radius: 6px;">
                     <h4 style="margin: 0 0 10px 0;">🔧 Debug & Troubleshooting</h4>
-                    <button onclick="debugSession()" style="padding: 8px 15px; background: #6c757d; color: white; border: none; border-radius: 6px; cursor: pointer; margin-right: 10px;">Check Session Status</button>
-                    <button onclick="testBlockFunction()" style="padding: 8px 15px; background: #17a2b8; color: white; border: none; border-radius: 6px; cursor: pointer;">Test Block Function</button>
+                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px;">
+                        <button onclick="debugSession()" style="padding: 8px 15px; background: #6c757d; color: white; border: none; border-radius: 6px; cursor: pointer;">Check Session Status</button>
+                        <button onclick="testBlockFunction()" style="padding: 8px 15px; background: #17a2b8; color: white; border: none; border-radius: 6px; cursor: pointer;">Test Block Function</button>
+                        <button onclick="fixMissingTimeSlots()" style="padding: 8px 15px; background: #28a745; color: white; border: none; border-radius: 6px; cursor: pointer;">Fix Missing 1PM Slots</button>
+                    </div>
+                    <p style="margin: 10px 0 0 0; font-size: 12px; color: #6c757d;">Use "Fix Missing 1PM Slots" if you can't block 1PM hours</p>
                 </div>
             </div>
             
@@ -1429,7 +1468,7 @@ class WaxingAppointments {
                     return;
                 }
                 
-                var timeSlots = ['09:00:00', '10:00:00', '11:00:00', '12:00:00', '14:00:00', '15:00:00', '16:00:00', '17:00:00'];
+                var timeSlots = ['09:00:00', '10:00:00', '11:00:00', '12:00:00', '13:00:00', '14:00:00', '15:00:00', '16:00:00', '17:00:00'];
                 var container = document.getElementById('time-slots');
                 var timeSlotsContainer = document.getElementById('time-slots-container');
                 
@@ -1505,6 +1544,33 @@ class WaxingAppointments {
                     error: function(xhr, status, error) {
                         alert('❌ Network error during test: ' + error + '\nStatus: ' + status);
                         console.log('Test error details:', xhr.responseText);
+                    }
+                });
+            }
+            
+            function fixMissingTimeSlots() {
+                if (!confirm('🕐 This will add missing 1PM (13:00) time slots to all dates.\n\nContinue?')) {
+                    return;
+                }
+                
+                $.ajax({
+                    url: '<?php echo admin_url('admin-ajax.php'); ?>',
+                    type: 'POST',
+                    data: {
+                        action: 'fix_missing_time_slots'
+                    },
+                    success: function(response) {
+                        console.log('Fix Missing Slots Response:', response);
+                        if (response.success) {
+                            alert(response.data);
+                            location.reload(); // Refresh to show new slots
+                        } else {
+                            alert('❌ Fix failed: ' + response.data);
+                        }
+                    },
+                    error: function(xhr, status, error) {
+                        alert('❌ Network error during fix: ' + error);
+                        console.log('Fix error:', xhr, status, error);
                     }
                 });
             }
@@ -1698,6 +1764,70 @@ class WaxingAppointments {
         );
         
         wp_send_json_success($debug_info);
+    }
+    
+    public function handle_fix_missing_time_slots() {
+        // Ensure session is started
+        if (session_status() === PHP_SESSION_NONE) {
+            session_start();
+        }
+        
+        // Check standalone authentication
+        if (!isset($_SESSION['calendar_admin_logged_in']) || !$_SESSION['calendar_admin_logged_in']) {
+            wp_send_json_error('Not authenticated - please login first');
+        }
+        
+        global $wpdb;
+        $availability_table = $wpdb->prefix . 'waxing_availability';
+        
+        // Find all dates that are missing the 13:00:00 slot
+        $missing_slots = $wpdb->get_results($wpdb->prepare(
+            "SELECT DISTINCT date FROM $availability_table 
+             WHERE date NOT IN (
+                 SELECT date FROM $availability_table WHERE time_slot = %s
+             ) 
+             AND date >= %s 
+             AND DAYOFWEEK(date) BETWEEN 2 AND 6
+             ORDER BY date",
+            '13:00:00',
+            date('Y-m-d')
+        ));
+        
+        $added_count = 0;
+        $errors = array();
+        
+        if (!empty($missing_slots)) {
+            foreach ($missing_slots as $slot) {
+                $result = $wpdb->insert(
+                    $availability_table,
+                    array(
+                        'date' => $slot->date,
+                        'time_slot' => '13:00:00',
+                        'is_available' => 1
+                    ),
+                    array('%s', '%s', '%d')
+                );
+                
+                if ($result) {
+                    $added_count++;
+                } else {
+                    $errors[] = 'Failed to add slot for ' . $slot->date;
+                }
+            }
+        }
+        
+        $message = "✅ Fixed missing 1PM time slots!\n\n";
+        $message .= "Added: {$added_count} time slots\n";
+        
+        if (!empty($errors)) {
+            $message .= "Errors: " . implode(', ', $errors);
+        }
+        
+        if ($added_count === 0 && empty($errors)) {
+            $message = "ℹ️ No missing 1PM slots found. All dates already have 13:00:00 time slots.";
+        }
+        
+        wp_send_json_success($message);
     }
 }
 
