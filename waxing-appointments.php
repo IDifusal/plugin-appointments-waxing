@@ -3,7 +3,7 @@
  * Plugin Name: Waxing Appointments
  * Plugin URI: https://difusal.com
  * Description: Simple appointment booking system for waxing services with WooCommerce integration
- * Version: 1.0.13
+ * Version: 1.1.3
  * Author: Difusal
  * License: GPL v2 or later
  * Requires at least: 5.0
@@ -39,11 +39,18 @@ class WaxingAppointments {
         add_shortcode('waxing_appointment_button', array($this, 'appointment_button_shortcode'));
         
         // Calendar admin route
-        add_action('init', array($this, 'handle_calendar_admin_route'));
+        add_action('template_redirect', array($this, 'handle_calendar_admin_route'));
+        add_action('parse_request', array($this, 'parse_calendar_admin_request'));
         add_action('wp_ajax_calendar_admin_login', array($this, 'handle_calendar_admin_login'));
         add_action('wp_ajax_nopriv_calendar_admin_login', array($this, 'handle_calendar_admin_login'));
         add_action('wp_ajax_block_calendar_time', array($this, 'handle_block_calendar_time'));
+        add_action('wp_ajax_nopriv_block_calendar_time', array($this, 'handle_block_calendar_time'));
         add_action('wp_ajax_unblock_calendar_time', array($this, 'handle_unblock_calendar_time'));
+        add_action('wp_ajax_nopriv_unblock_calendar_time', array($this, 'handle_unblock_calendar_time'));
+        add_action('wp_ajax_check_time_slot_status', array($this, 'handle_check_time_slot_status'));
+        add_action('wp_ajax_nopriv_check_time_slot_status', array($this, 'handle_check_time_slot_status'));
+        add_action('wp_ajax_debug_calendar_session', array($this, 'handle_debug_calendar_session'));
+        add_action('wp_ajax_nopriv_debug_calendar_session', array($this, 'handle_debug_calendar_session'));
         
         // WooCommerce hooks for dynamic pricing
         add_action('woocommerce_before_calculate_totals', array($this, 'set_cart_item_price'));
@@ -477,6 +484,15 @@ class WaxingAppointments {
             'dashicons-calendar-alt',
             26
         );
+        
+        add_submenu_page(
+            'waxing-appointments',
+            'Calendar Admin Settings',
+            'Calendar Settings',
+            'manage_options',
+            'waxing-calendar-settings',
+            array($this, 'calendar_settings_page')
+        );
     }
     
     public function admin_page() {
@@ -524,10 +540,81 @@ class WaxingAppointments {
         <?php
     }
     
+    public function calendar_settings_page() {
+        if (isset($_POST['submit'])) {
+            $username = sanitize_text_field($_POST['calendar_username']);
+            $password = sanitize_text_field($_POST['calendar_password']);
+            
+            update_option('waxing_calendar_admin_username', $username);
+            update_option('waxing_calendar_admin_password', $password);
+            
+            echo '<div class="notice notice-success"><p>Calendar admin credentials updated successfully!</p></div>';
+        }
+        
+        $current_username = get_option('waxing_calendar_admin_username', 'admin');
+        $current_password = get_option('waxing_calendar_admin_password', 'waxing2024');
+        ?>
+        <div class="wrap">
+            <h1>Calendar Admin Settings</h1>
+            <p>Configure the login credentials for the standalone calendar admin panel at: <strong><?php echo home_url('/calendar-admin'); ?></strong></p>
+            
+            <form method="post" action="">
+                <table class="form-table">
+                    <tr>
+                        <th scope="row">Username</th>
+                        <td>
+                            <input type="text" name="calendar_username" value="<?php echo esc_attr($current_username); ?>" class="regular-text" required />
+                            <p class="description">Username for calendar admin login</p>
+                        </td>
+                    </tr>
+                    <tr>
+                        <th scope="row">Password</th>
+                        <td>
+                            <input type="password" name="calendar_password" value="<?php echo esc_attr($current_password); ?>" class="regular-text" required />
+                            <p class="description">Password for calendar admin login</p>
+                        </td>
+                    </tr>
+                </table>
+                
+                <?php submit_button('Update Credentials'); ?>
+            </form>
+            
+            <div class="card" style="max-width: 600px; margin-top: 20px;">
+                <h3>How to Access Calendar Admin</h3>
+                <ol>
+                    <li>Go to: <a href="<?php echo home_url('/calendar-admin'); ?>" target="_blank"><?php echo home_url('/calendar-admin'); ?></a></li>
+                    <li>Use the credentials configured above</li>
+                    <li>Manage appointment availability independently of WordPress</li>
+                </ol>
+                <p><strong>Note:</strong> This calendar admin system is completely independent of WordPress user accounts. Anyone with these credentials can access the calendar management interface.</p>
+            </div>
+        </div>
+        <?php
+    }
+    
     public function handle_calendar_admin_route() {
-        if (isset($_GET['calendar-admin']) || (isset($_SERVER['REQUEST_URI']) && strpos($_SERVER['REQUEST_URI'], '/calendar-admin') !== false)) {
+        // Check if this is the calendar admin route
+        $request_uri = $_SERVER['REQUEST_URI'];
+        $parsed_url = parse_url($request_uri);
+        $path = isset($parsed_url['path']) ? $parsed_url['path'] : '';
+        
+        // Remove trailing slash and check if path ends with calendar-admin
+        $path = rtrim($path, '/');
+        
+        if (isset($_GET['calendar-admin']) || 
+            $path === '/calendar-admin' || 
+            substr($path, -15) === '/calendar-admin' ||
+            (is_404() && strpos($request_uri, 'calendar-admin') !== false)) {
+            
             if (!session_id()) {
                 session_start();
+            }
+            
+            // Handle logout
+            if (isset($_GET['logout'])) {
+                session_destroy();
+                wp_redirect(home_url('/calendar-admin'));
+                exit;
             }
             
             if (!isset($_SESSION['calendar_admin_logged_in']) || !$_SESSION['calendar_admin_logged_in']) {
@@ -537,6 +624,15 @@ class WaxingAppointments {
                 $this->show_calendar_admin_dashboard();
                 exit;
             }
+        }
+    }
+    
+    public function parse_calendar_admin_request($wp) {
+        if (isset($wp->request) && $wp->request === 'calendar-admin') {
+            // Mark this as a valid request to prevent 404
+            $wp->matched_rule = 'calendar-admin';
+            $wp->matched_query = 'calendar-admin=1';
+            $wp->query_vars['calendar-admin'] = '1';
         }
     }
     
@@ -631,8 +727,7 @@ class WaxingAppointments {
                         data: {
                             action: 'calendar_admin_login',
                             username: $('#username').val(),
-                            password: $('#password').val(),
-                            nonce: '<?php echo wp_create_nonce('calendar_admin_nonce'); ?>'
+                            password: $('#password').val()
                         },
                         success: function(response) {
                             if (response.success) {
@@ -640,6 +735,9 @@ class WaxingAppointments {
                             } else {
                                 $('#error-message').text(response.data).show();
                             }
+                        },
+                        error: function() {
+                            $('#error-message').text('Login error. Please try again.').show();
                         }
                     });
                 });
@@ -651,17 +749,25 @@ class WaxingAppointments {
     }
     
     public function handle_calendar_admin_login() {
-        check_ajax_referer('calendar_admin_nonce', 'nonce');
+        // Bypass WordPress nonce for standalone login
+        if (!isset($_POST['username']) || !isset($_POST['password'])) {
+            wp_send_json_error('Missing credentials');
+        }
         
         $username = sanitize_text_field($_POST['username']);
         $password = sanitize_text_field($_POST['password']);
         
-        // Simple hardcoded credentials (you can make this configurable later)
-        if ($username === 'admin' && $password === 'waxing2024') {
+        // Get credentials from WordPress options (but authentication is still independent)
+        $admin_username = get_option('waxing_calendar_admin_username', 'admin');
+        $admin_password = get_option('waxing_calendar_admin_password', 'waxing2024');
+        
+        if ($username === $admin_username && $password === $admin_password) {
             if (!session_id()) {
                 session_start();
             }
             $_SESSION['calendar_admin_logged_in'] = true;
+            $_SESSION['calendar_admin_user'] = $username;
+            $_SESSION['calendar_admin_login_time'] = time();
             wp_send_json_success('Login successful');
         } else {
             wp_send_json_error('Invalid credentials');
@@ -679,12 +785,70 @@ class WaxingAppointments {
             date('Y-m-d')
         ));
         
-        // Get availability for next 30 days
+        // Get availability for next 60 days
         $availability = $wpdb->get_results($wpdb->prepare(
             "SELECT * FROM $availability_table WHERE date >= %s AND date <= %s ORDER BY date, time_slot",
             date('Y-m-d'),
-            date('Y-m-d', strtotime('+30 days'))
+            date('Y-m-d', strtotime('+60 days'))
         ));
+        
+        // Prepare data for FullCalendar
+        $calendar_events = array();
+        
+        // Add appointments as events
+        foreach ($appointments as $appointment) {
+            $service_name = str_replace('_', ' ', ucwords($appointment->service_id));
+            $calendar_events[] = array(
+                'id' => 'appointment_' . $appointment->id,
+                'title' => $appointment->customer_name . ' - ' . $service_name,
+                'start' => $appointment->appointment_date . 'T' . $appointment->appointment_time,
+                'end' => date('Y-m-d\TH:i:s', strtotime($appointment->appointment_date . ' ' . $appointment->appointment_time . ' +1 hour')),
+                'backgroundColor' => '#0073aa',
+                'borderColor' => '#005a87',
+                'extendedProps' => array(
+                    'type' => 'appointment',
+                    'customer_name' => $appointment->customer_name,
+                    'customer_email' => $appointment->customer_email,
+                    'customer_phone' => $appointment->customer_phone,
+                    'service' => $service_name,
+                    'status' => $appointment->status,
+                    'total_price' => $appointment->total_price,
+                    'deposit_paid' => $appointment->deposit_paid
+                )
+            );
+        }
+        
+        // Add blocked time slots as events
+        $blocked_slots = array();
+        foreach ($availability as $slot) {
+            if (!$slot->is_available) {
+                $slot_key = $slot->date . '_' . $slot->time_slot;
+                // Check if this slot is not already booked by an appointment
+                $is_booked = false;
+                foreach ($appointments as $appointment) {
+                    if ($appointment->appointment_date === $slot->date && $appointment->appointment_time === $slot->time_slot) {
+                        $is_booked = true;
+                        break;
+                    }
+                }
+                
+                if (!$is_booked) {
+                    $calendar_events[] = array(
+                        'id' => 'blocked_' . $slot->date . '_' . str_replace(':', '', $slot->time_slot),
+                        'title' => 'Blocked',
+                        'start' => $slot->date . 'T' . $slot->time_slot,
+                        'end' => date('Y-m-d\TH:i:s', strtotime($slot->date . ' ' . $slot->time_slot . ' +1 hour')),
+                        'backgroundColor' => '#d63638',
+                        'borderColor' => '#a02622',
+                        'extendedProps' => array(
+                            'type' => 'blocked',
+                            'date' => $slot->date,
+                            'time' => $slot->time_slot
+                        )
+                    );
+                }
+            }
+        }
         
         ?>
         <!DOCTYPE html>
@@ -692,185 +856,528 @@ class WaxingAppointments {
         <head>
             <title>Calendar Admin Dashboard</title>
             <meta name="viewport" content="width=device-width, initial-scale=1">
+            <script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.18/index.global.min.js"></script>
+            <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
             <style>
                 body { 
-                    font-family: Arial, sans-serif; 
+                    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; 
                     margin: 0; 
                     padding: 20px; 
-                    background: #f1f1f1;
+                    background: #f6f7f9;
+                    line-height: 1.5;
                 }
                 .header { 
                     background: white; 
-                    padding: 20px; 
-                    margin-bottom: 20px; 
-                    border-radius: 8px; 
-                    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+                    padding: 25px; 
+                    margin-bottom: 25px; 
+                    border-radius: 12px; 
+                    box-shadow: 0 2px 8px rgba(0,0,0,0.08);
                     display: flex; 
                     justify-content: space-between; 
                     align-items: center;
+                    border: 1px solid #e1e5e9;
+                }
+                .header h1 {
+                    margin: 0;
+                    color: #1a202c;
+                    font-weight: 600;
                 }
                 .logout-btn { 
-                    background: #d63638; 
+                    background: #e53e3e; 
                     color: white; 
-                    padding: 8px 16px; 
+                    padding: 10px 20px; 
                     text-decoration: none; 
+                    border-radius: 8px;
+                    font-weight: 500;
+                    transition: background 0.2s;
+                }
+                .logout-btn:hover {
+                    background: #c53030;
+                }
+                .calendar-container { 
+                    background: white; 
+                    padding: 25px; 
+                    border-radius: 12px; 
+                    box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+                    border: 1px solid #e1e5e9;
+                    margin-bottom: 25px;
+                }
+                #calendar {
+                    max-width: 100%;
+                    margin: 0 auto;
+                }
+                .stats-grid {
+                    display: grid;
+                    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+                    gap: 20px;
+                    margin-bottom: 25px;
+                }
+                .stat-card {
+                    background: white;
+                    padding: 20px;
+                    border-radius: 12px;
+                    box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+                    border: 1px solid #e1e5e9;
+                    text-align: center;
+                }
+                .stat-number {
+                    font-size: 2.5rem;
+                    font-weight: 700;
+                    color: #0073aa;
+                    margin: 0;
+                }
+                .stat-label {
+                    color: #718096;
+                    margin-top: 5px;
+                    font-weight: 500;
+                }
+                .legend {
+                    display: flex;
+                    gap: 20px;
+                    margin-bottom: 20px;
+                    flex-wrap: wrap;
+                }
+                .legend-item {
+                    display: flex;
+                    align-items: center;
+                    gap: 8px;
+                }
+                .legend-color {
+                    width: 16px;
+                    height: 16px;
                     border-radius: 4px;
                 }
-                .dashboard-grid { 
-                    display: grid; 
-                    grid-template-columns: 1fr 1fr; 
-                    gap: 20px;
+                .legend-color.appointment {
+                    background: #0073aa;
                 }
-                .panel { 
-                    background: white; 
-                    padding: 20px; 
-                    border-radius: 8px; 
-                    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+                .legend-color.blocked {
+                    background: #d63638;
                 }
-                .panel h3 { 
-                    margin-top: 0; 
-                    color: #333;
+                .legend-color.available {
+                    background: #00a32a;
                 }
-                .appointment-item { 
-                    padding: 10px; 
-                    border-left: 4px solid #0073aa; 
-                    margin-bottom: 10px; 
-                    background: #f9f9f9;
+                .quick-actions {
+                    background: white;
+                    padding: 25px;
+                    border-radius: 12px;
+                    box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+                    border: 1px solid #e1e5e9;
                 }
-                .calendar-day { 
-                    border: 1px solid #ddd; 
-                    margin-bottom: 15px; 
-                    background: #fff;
+                .quick-actions h3 {
+                    margin-top: 0;
+                    color: #1a202c;
                 }
-                .calendar-day-header { 
-                    background: #0073aa; 
-                    color: white; 
-                    padding: 10px; 
+                .time-slot-selector {
+                    display: grid;
+                    grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+                    gap: 10px;
+                    margin: 20px 0;
+                }
+                .time-slot-btn {
+                    padding: 10px;
+                    border: 2px solid #e2e8f0;
+                    background: white;
+                    border-radius: 8px;
+                    cursor: pointer;
+                    text-align: center;
+                    transition: all 0.2s;
+                    font-size: 14px;
+                }
+                .time-slot-btn:hover {
+                    border-color: #0073aa;
+                    background: #f7fafc;
+                }
+                .time-slot-btn.blocked {
+                    background: #fed7d7;
+                    border-color: #fc8181;
+                    color: #c53030;
+                }
+                /* FullCalendar customizations */
+                .fc-event-title {
+                    font-weight: 500;
+                }
+                .fc-toolbar {
+                    margin-bottom: 20px !important;
+                }
+                .fc-button {
+                    background: #0073aa !important;
+                    border-color: #0073aa !important;
+                }
+                .fc-button:hover {
+                    background: #005a87 !important;
+                    border-color: #005a87 !important;
+                }
+                .fc-today-button {
+                    background: #00a32a !important;
+                    border-color: #00a32a !important;
+                }
+                
+                /* Selection styling */
+                .fc-highlight {
+                    background: rgba(0, 115, 170, 0.3) !important;
+                    border: 2px dashed #0073aa !important;
+                }
+                .fc-select-mirror {
+                    background: rgba(0, 115, 170, 0.2) !important;
+                    border: 2px solid #0073aa !important;
+                    color: #0073aa !important;
                     font-weight: bold;
                 }
-                .time-slot { 
-                    padding: 8px 12px; 
-                    border-bottom: 1px solid #eee; 
-                    display: flex; 
-                    justify-content: space-between; 
-                    align-items: center;
+                
+                /* Cursor changes for better UX */
+                .fc-timegrid-slot {
+                    cursor: crosshair;
                 }
-                .time-slot.blocked { 
-                    background: #ffecec; 
-                    color: #d63638;
+                .fc-daygrid-day {
+                    cursor: pointer;
                 }
-                .time-slot.booked { 
-                    background: #e6f3ff; 
-                    color: #0073aa;
+                
+                /* Selection instructions */
+                .selection-instructions {
+                    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                    color: white;
+                    padding: 15px;
+                    border-radius: 8px;
+                    margin-bottom: 20px;
+                    text-align: center;
+                    font-weight: 500;
                 }
-                .block-btn { 
-                    background: #d63638; 
-                    color: white; 
-                    border: none; 
-                    padding: 4px 8px; 
-                    border-radius: 3px; 
-                    cursor: pointer; 
-                    font-size: 12px;
-                }
-                .unblock-btn { 
-                    background: #00a32a; 
-                    color: white; 
-                    border: none; 
-                    padding: 4px 8px; 
-                    border-radius: 3px; 
-                    cursor: pointer; 
-                    font-size: 12px;
+                .selection-instructions strong {
+                    color: #ffd700;
                 }
                 @media (max-width: 768px) {
-                    .dashboard-grid { 
+                    .stats-grid { 
                         grid-template-columns: 1fr; 
+                    }
+                    .legend {
+                        justify-content: center;
+                    }
+                    .header {
+                        flex-direction: column;
+                        gap: 15px;
+                        text-align: center;
                     }
                 }
             </style>
-            <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
         </head>
         <body>
             <div class="header">
-                <h1>Calendar Admin Dashboard</h1>
+                <h1>📅 Calendar Admin Dashboard</h1>
                 <a href="?logout=1" class="logout-btn">Logout</a>
             </div>
             
-            <div class="dashboard-grid">
-                <div class="panel">
-                    <h3>Upcoming Appointments</h3>
-                    <?php if (empty($appointments)): ?>
-                        <p>No upcoming appointments</p>
-                    <?php else: ?>
-                        <?php foreach ($appointments as $appointment): ?>
-                            <div class="appointment-item">
-                                <strong><?php echo esc_html($appointment->customer_name); ?></strong><br>
-                                <small><?php echo esc_html(str_replace('_', ' ', ucwords($appointment->service_id))); ?></small><br>
-                                <?php echo date('M j, Y', strtotime($appointment->appointment_date)); ?> at 
-                                <?php echo date('g:i A', strtotime($appointment->appointment_time)); ?><br>
-                                <small>Status: <?php echo esc_html($appointment->status); ?></small>
-                            </div>
-                        <?php endforeach; ?>
-                    <?php endif; ?>
+            <!-- Statistics Cards -->
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <div class="stat-number"><?php echo count($appointments); ?></div>
+                    <div class="stat-label">Upcoming Appointments</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-number"><?php 
+                        $blocked_count = 0;
+                        foreach ($availability as $slot) {
+                            if (!$slot->is_available) {
+                                $is_booked = false;
+                                foreach ($appointments as $appointment) {
+                                    if ($appointment->appointment_date === $slot->date && $appointment->appointment_time === $slot->time_slot) {
+                                        $is_booked = true;
+                                        break;
+                                    }
+                                }
+                                if (!$is_booked) $blocked_count++;
+                            }
+                        }
+                        echo $blocked_count;
+                    ?></div>
+                    <div class="stat-label">Blocked Time Slots</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-number">$<?php 
+                        $total_revenue = 0;
+                        foreach ($appointments as $appointment) {
+                            $total_revenue += $appointment->deposit_paid;
+                        }
+                        echo number_format($total_revenue, 2);
+                    ?></div>
+                    <div class="stat-label">Total Deposits</div>
+                </div>
+            </div>
+            
+            <!-- Selection Instructions -->
+            <div class="selection-instructions">
+                <strong>🎯 How to use the calendar:</strong> 
+                <strong>DRAG</strong> to select multiple hours | 
+                <strong>CLICK</strong> events for details | 
+                Switch views with the buttons above
+            </div>
+            
+            <!-- Calendar Container -->
+            <div class="calendar-container">
+                <div class="legend">
+                    <div class="legend-item">
+                        <div class="legend-color appointment"></div>
+                        <span>Appointments</span>
+                    </div>
+                    <div class="legend-item">
+                        <div class="legend-color blocked"></div>
+                        <span>Blocked Times</span>
+                    </div>
+                    <div class="legend-item">
+                        <div class="legend-color available"></div>
+                        <span>Available</span>
+                    </div>
                 </div>
                 
-                <div class="panel">
-                    <h3>Calendar Schedule Management</h3>
-                    <p>Click to block/unblock time slots:</p>
-                    
-                    <?php
-                    $current_date = '';
-                    $booked_slots = array();
-                    
-                    // Create array of booked slots
-                    foreach ($appointments as $appointment) {
-                        $key = $appointment->appointment_date . '_' . $appointment->appointment_time;
-                        $booked_slots[$key] = $appointment;
-                    }
-                    
-                    foreach ($availability as $slot):
-                        if ($current_date !== $slot->date):
-                            if ($current_date !== '') echo '</div>';
-                            $current_date = $slot->date;
-                            ?>
-                            <div class="calendar-day">
-                                <div class="calendar-day-header">
-                                    <?php echo date('l, M j, Y', strtotime($slot->date)); ?>
-                                </div>
-                        <?php endif; 
-                        
-                        $slot_key = $slot->date . '_' . $slot->time_slot;
-                        $is_booked = isset($booked_slots[$slot_key]);
-                        $class = $is_booked ? 'booked' : ($slot->is_available ? '' : 'blocked');
-                        ?>
-                        
-                        <div class="time-slot <?php echo $class; ?>">
-                            <span>
-                                <?php echo date('g:i A', strtotime($slot->time_slot)); ?>
-                                <?php if ($is_booked): ?>
-                                    - Booked by <?php echo esc_html($booked_slots[$slot_key]->customer_name); ?>
-                                <?php elseif (!$slot->is_available): ?>
-                                    - Blocked
-                                <?php endif; ?>
-                            </span>
-                            
-                            <?php if (!$is_booked): ?>
-                                <?php if ($slot->is_available): ?>
-                                    <button class="block-btn" onclick="blockTimeSlot('<?php echo $slot->date; ?>', '<?php echo $slot->time_slot; ?>')">
-                                        Block
-                                    </button>
-                                <?php else: ?>
-                                    <button class="unblock-btn" onclick="unblockTimeSlot('<?php echo $slot->date; ?>', '<?php echo $slot->time_slot; ?>')">
-                                        Unblock
-                                    </button>
-                                <?php endif; ?>
-                            <?php endif; ?>
-                        </div>
-                    <?php endforeach; ?>
+                <div id="calendar"></div>
+            </div>
+            
+            <!-- Quick Actions Panel -->
+            <div class="quick-actions">
+                <h3>🚀 Calendar Management Guide</h3>
+                
+                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 20px; margin-top: 20px;">
+                    <div style="background: #f8f9fa; padding: 15px; border-radius: 8px; border-left: 4px solid #0073aa;">
+                        <h4 style="margin: 0 0 10px 0; color: #0073aa;">🖱️ Block Multiple Hours</h4>
+                        <ol style="margin: 0; padding-left: 20px;">
+                            <li>Switch to <strong>Week</strong> or <strong>Day</strong> view</li>
+                            <li><strong>Click and drag</strong> across time slots</li>
+                            <li>Confirm to block the selected range</li>
+                        </ol>
                     </div>
+                    
+                    <div style="background: #f8f9fa; padding: 15px; border-radius: 8px; border-left: 4px solid #d63638;">
+                        <h4 style="margin: 0 0 10px 0; color: #d63638;">🔓 Manage Individual Slots</h4>
+                        <ul style="margin: 0; padding-left: 20px;">
+                            <li><strong>Click</strong> red blocks to unblock</li>
+                            <li><strong>Click</strong> empty slots to block</li>
+                            <li><strong>Click</strong> blue appointments for details</li>
+                        </ul>
+                    </div>
+                </div>
+                
+                <div style="margin-top: 20px;">
+                    <label for="quick-date" style="display: block; margin-bottom: 10px; font-weight: 500;">🗓️ Quick Block Specific Date:</label>
+                    <input type="date" id="quick-date" style="padding: 8px; border: 1px solid #e2e8f0; border-radius: 6px; margin-right: 10px;">
+                    <button onclick="showTimeSlotsForDate()" style="padding: 8px 15px; background: #0073aa; color: white; border: none; border-radius: 6px; cursor: pointer;">Show Available Times</button>
+                </div>
+                
+                <div id="time-slots-container" style="display: none; margin-top: 20px;">
+                    <div class="time-slot-selector" id="time-slots"></div>
+                </div>
+                
+                <div style="margin-top: 20px; padding: 15px; background: #fff3cd; border: 1px solid #ffeaa7; border-radius: 6px;">
+                    <h4 style="margin: 0 0 10px 0;">🔧 Debug & Troubleshooting</h4>
+                    <button onclick="debugSession()" style="padding: 8px 15px; background: #6c757d; color: white; border: none; border-radius: 6px; cursor: pointer; margin-right: 10px;">Check Session Status</button>
+                    <button onclick="testBlockFunction()" style="padding: 8px 15px; background: #17a2b8; color: white; border: none; border-radius: 6px; cursor: pointer;">Test Block Function</button>
                 </div>
             </div>
             
             <script>
+            document.addEventListener('DOMContentLoaded', function() {
+                var calendarEl = document.getElementById('calendar');
+                var calendar = new FullCalendar.Calendar(calendarEl, {
+                    initialView: 'timeGridWeek', // Start with week view for better time selection
+                    headerToolbar: {
+                        left: 'prev,next today',
+                        center: 'title',
+                        right: 'dayGridMonth,timeGridWeek,timeGridDay'
+                    },
+                    height: 'auto',
+                    events: <?php echo json_encode($calendar_events); ?>,
+                    
+                    // Enable date/time selection
+                    selectable: true,
+                    selectMirror: true,
+                    selectOverlap: false, // Don't allow selection over existing events
+                    unselectAuto: true,
+                    selectConstraint: {
+                        daysOfWeek: [1, 2, 3, 4, 5], // Only weekdays
+                        startTime: '09:00',
+                        endTime: '18:00'
+                    },
+                    
+                    // Selection callback - triggered when user drags to select time range
+                    select: function(selectionInfo) {
+                        var startDate = selectionInfo.start;
+                        var endDate = selectionInfo.end;
+                        
+                        // Calculate how many time slots are selected
+                        var duration = (endDate - startDate) / (1000 * 60 * 60); // duration in hours
+                        var slotsCount = Math.ceil(duration);
+                        
+                        var action = confirm(
+                            'You have selected ' + slotsCount + ' hour(s) from:\n' +
+                            startDate.toLocaleString() + ' to ' + endDate.toLocaleString() + '\n\n' +
+                            'What would you like to do?\n\n' +
+                            'OK = Block these time slots\n' +
+                            'Cancel = Clear selection'
+                        );
+                        
+                        if (action) {
+                            blockTimeRange(startDate, endDate);
+                        }
+                        
+                        // Clear the selection
+                        calendar.unselect();
+                    },
+                    
+                    eventClick: function(info) {
+                        var event = info.event;
+                        var extendedProps = event.extendedProps;
+                        
+                        if (extendedProps.type === 'appointment') {
+                            alert('📅 Appointment Details:\n\n' +
+                                '👤 Customer: ' + extendedProps.customer_name + '\n' +
+                                '📧 Email: ' + extendedProps.customer_email + '\n' +
+                                '📞 Phone: ' + extendedProps.customer_phone + '\n' +
+                                '💄 Service: ' + extendedProps.service + '\n' +
+                                '📊 Status: ' + extendedProps.status + '\n' +
+                                '💰 Total: $' + extendedProps.total_price + '\n' +
+                                '💳 Deposit: $' + extendedProps.deposit_paid);
+                        } else if (extendedProps.type === 'blocked') {
+                            if (confirm('🚫 This time slot is currently BLOCKED.\n\nDo you want to UNBLOCK it?')) {
+                                unblockTimeSlot(extendedProps.date, extendedProps.time);
+                            }
+                        }
+                    },
+                    
+                    dateClick: function(info) {
+                        if (info.view.type === 'dayGridMonth') {
+                            // In month view, switch to week view for that date
+                            calendar.changeView('timeGridWeek', info.dateStr);
+                        } else {
+                            // In time grid views, show time selection
+                            var date = info.dateStr.split('T')[0]; // Get just the date part
+                            var time = prompt('⏰ Enter time to block/unblock (format: HH:MM):');
+                            
+                            if (time && time.match(/^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/)) {
+                                checkAndToggleTimeSlot(date, time + ':00');
+                            } else if (time) {
+                                alert('❌ Invalid time format. Please use HH:MM (e.g., 09:00, 14:30)');
+                            }
+                        }
+                    },
+                    
+                    businessHours: {
+                        daysOfWeek: [1, 2, 3, 4, 5], // Monday - Friday
+                        startTime: '09:00',
+                        endTime: '18:00'
+                    },
+                    slotMinTime: '09:00:00',
+                    slotMaxTime: '18:00:00',
+                    slotDuration: '01:00:00', // 1 hour slots
+                    snapDuration: '01:00:00' // Snap to 1 hour intervals
+                });
+                
+                calendar.render();
+            });
+            
+            function blockTimeRange(startDate, endDate) {
+                var timeSlots = [];
+                var current = new Date(startDate);
+                
+                // Generate all hour slots in the range
+                while (current < endDate) {
+                    var dateStr = current.toISOString().split('T')[0];
+                    var timeStr = current.toTimeString().split(' ')[0]; // HH:MM:SS format
+                    
+                    timeSlots.push({
+                        date: dateStr,
+                        time: timeStr
+                    });
+                    
+                    // Move to next hour
+                    current.setHours(current.getHours() + 1);
+                }
+                
+                if (timeSlots.length === 0) {
+                    alert('❌ No valid time slots found in selection.');
+                    return;
+                }
+                
+                // Show progress
+                var processed = 0;
+                var errors = [];
+                
+                function processSlot(index) {
+                    if (index >= timeSlots.length) {
+                        // All done
+                        if (errors.length > 0) {
+                            alert('⚠️ Blocking completed with some errors:\n' + errors.join('\n'));
+                        } else {
+                            alert('✅ Successfully blocked ' + timeSlots.length + ' time slot(s)!');
+                        }
+                        location.reload();
+                        return;
+                    }
+                    
+                    var slot = timeSlots[index];
+                    
+                    $.ajax({
+                        url: '<?php echo admin_url('admin-ajax.php'); ?>',
+                        type: 'POST',
+                        data: {
+                            action: 'block_calendar_time',
+                            date: slot.date,
+                            time: slot.time
+                        },
+                        success: function(response) {
+                            processed++;
+                            if (!response.success) {
+                                errors.push(slot.date + ' ' + slot.time + ': ' + response.data);
+                            }
+                            // Process next slot
+                            processSlot(index + 1);
+                        },
+                        error: function() {
+                            processed++;
+                            errors.push(slot.date + ' ' + slot.time + ': Network error');
+                            // Process next slot anyway
+                            processSlot(index + 1);
+                        }
+                    });
+                }
+                
+                // Start processing
+                processSlot(0);
+            }
+            
+            function checkAndToggleTimeSlot(date, time) {
+                // Check if time slot exists and toggle its availability
+                $.ajax({
+                    url: '<?php echo admin_url('admin-ajax.php'); ?>',
+                    type: 'POST',
+                    data: {
+                        action: 'check_time_slot_status',
+                        date: date,
+                        time: time
+                    },
+                    success: function(response) {
+                        if (response.success) {
+                            var isAvailable = response.data.is_available;
+                            var isBooked = response.data.is_booked;
+                            
+                            if (isBooked) {
+                                alert('❌ This time slot is already booked and cannot be modified.');
+                                return;
+                            }
+                            
+                            if (isAvailable) {
+                                if (confirm('🚫 Block this time slot?')) {
+                                    blockTimeSlot(date, time);
+                                }
+                            } else {
+                                if (confirm('✅ Unblock this time slot?')) {
+                                    unblockTimeSlot(date, time);
+                                }
+                            }
+                        } else {
+                            alert('❌ Time slot not found in system.');
+                        }
+                    }
+                });
+            }
+            
             function blockTimeSlot(date, time) {
                 $.ajax({
                     url: '<?php echo admin_url('admin-ajax.php'); ?>',
@@ -878,8 +1385,7 @@ class WaxingAppointments {
                     data: {
                         action: 'block_calendar_time',
                         date: date,
-                        time: time,
-                        nonce: '<?php echo wp_create_nonce('calendar_admin_nonce'); ?>'
+                        time: time
                     },
                     success: function(response) {
                         if (response.success) {
@@ -887,6 +1393,9 @@ class WaxingAppointments {
                         } else {
                             alert('Error: ' + response.data);
                         }
+                    },
+                    error: function() {
+                        alert('Network error. Please try again.');
                     }
                 });
             }
@@ -898,8 +1407,7 @@ class WaxingAppointments {
                     data: {
                         action: 'unblock_calendar_time',
                         date: date,
-                        time: time,
-                        nonce: '<?php echo wp_create_nonce('calendar_admin_nonce'); ?>'
+                        time: time
                     },
                     success: function(response) {
                         if (response.success) {
@@ -907,6 +1415,96 @@ class WaxingAppointments {
                         } else {
                             alert('Error: ' + response.data);
                         }
+                    },
+                    error: function() {
+                        alert('Network error. Please try again.');
+                    }
+                });
+            }
+            
+            function showTimeSlotsForDate() {
+                var date = document.getElementById('quick-date').value;
+                if (!date) {
+                    alert('Please select a date first.');
+                    return;
+                }
+                
+                var timeSlots = ['09:00:00', '10:00:00', '11:00:00', '12:00:00', '14:00:00', '15:00:00', '16:00:00', '17:00:00'];
+                var container = document.getElementById('time-slots');
+                var timeSlotsContainer = document.getElementById('time-slots-container');
+                
+                container.innerHTML = '';
+                
+                timeSlots.forEach(function(time) {
+                    var button = document.createElement('div');
+                    button.className = 'time-slot-btn';
+                    button.textContent = time.substring(0, 5);
+                    button.onclick = function() {
+                        checkAndToggleTimeSlot(date, time);
+                    };
+                    container.appendChild(button);
+                });
+                
+                timeSlotsContainer.style.display = 'block';
+            }
+            
+            function debugSession() {
+                $.ajax({
+                    url: '<?php echo admin_url('admin-ajax.php'); ?>',
+                    type: 'POST',
+                    data: {
+                        action: 'debug_calendar_session'
+                    },
+                    success: function(response) {
+                        console.log('Debug Response:', response);
+                        if (response.success) {
+                            var info = response.data;
+                            alert('📊 Session Debug Info:\n\n' +
+                                'Session Status: ' + info.session_status + '\n' +
+                                'Session ID: ' + info.session_id + '\n' +
+                                'Logged In: ' + info.session_logged_in + '\n' +
+                                'User: ' + info.session_user + '\n' +
+                                'Login Time: ' + info.session_login_time + '\n' +
+                                'Current Time: ' + info.current_time + '\n\n' +
+                                'Check browser console for full details.');
+                        } else {
+                            alert('❌ Debug failed: ' + response.data);
+                        }
+                    },
+                    error: function(xhr, status, error) {
+                        alert('❌ Network error during debug: ' + error);
+                        console.log('Debug error:', xhr, status, error);
+                    }
+                });
+            }
+            
+            function testBlockFunction() {
+                var testDate = new Date();
+                testDate.setDate(testDate.getDate() + 1); // Tomorrow
+                var dateStr = testDate.toISOString().split('T')[0];
+                var timeStr = '15:00:00'; // 3 PM
+                
+                console.log('Testing block function with:', dateStr, timeStr);
+                
+                $.ajax({
+                    url: '<?php echo admin_url('admin-ajax.php'); ?>',
+                    type: 'POST',
+                    data: {
+                        action: 'block_calendar_time',
+                        date: dateStr,
+                        time: timeStr
+                    },
+                    success: function(response) {
+                        console.log('Test Block Response:', response);
+                        if (response.success) {
+                            alert('✅ Test successful: ' + response.data);
+                        } else {
+                            alert('❌ Test failed: ' + response.data);
+                        }
+                    },
+                    error: function(xhr, status, error) {
+                        alert('❌ Network error during test: ' + error + '\nStatus: ' + status);
+                        console.log('Test error details:', xhr.responseText);
                     }
                 });
             }
@@ -914,32 +1512,48 @@ class WaxingAppointments {
         </body>
         </html>
         <?php
-        
-        // Handle logout
-        if (isset($_GET['logout'])) {
-            session_start();
-            session_destroy();
-            wp_redirect(home_url('/calendar-admin'));
-            exit;
-        }
     }
     
     public function handle_block_calendar_time() {
-        check_ajax_referer('calendar_admin_nonce', 'nonce');
-        
-        if (!session_id()) {
+        // Ensure session is started
+        if (session_status() === PHP_SESSION_NONE) {
             session_start();
         }
         
+        // Check standalone authentication
         if (!isset($_SESSION['calendar_admin_logged_in']) || !$_SESSION['calendar_admin_logged_in']) {
-            wp_send_json_error('Not authenticated');
+            wp_send_json_error('Not authenticated - please login first');
+        }
+        
+        if (!isset($_POST['date']) || !isset($_POST['time'])) {
+            wp_send_json_error('Missing date or time parameters');
         }
         
         $date = sanitize_text_field($_POST['date']);
         $time = sanitize_text_field($_POST['time']);
         
+        // Validate date format
+        if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $date)) {
+            wp_send_json_error('Invalid date format');
+        }
+        
+        // Validate time format
+        if (!preg_match('/^\d{2}:\d{2}:\d{2}$/', $time)) {
+            wp_send_json_error('Invalid time format');
+        }
+        
         global $wpdb;
         $availability_table = $wpdb->prefix . 'waxing_availability';
+        
+        // Check if the slot exists first
+        $exists = $wpdb->get_var($wpdb->prepare(
+            "SELECT COUNT(*) FROM $availability_table WHERE date = %s AND time_slot = %s",
+            $date, $time
+        ));
+        
+        if (!$exists) {
+            wp_send_json_error('Time slot does not exist in the system');
+        }
         
         $result = $wpdb->update(
             $availability_table,
@@ -950,28 +1564,52 @@ class WaxingAppointments {
         );
         
         if ($result !== false) {
-            wp_send_json_success('Time slot blocked');
+            wp_send_json_success('Time slot blocked successfully');
         } else {
-            wp_send_json_error('Failed to block time slot');
+            wp_send_json_error('Failed to block time slot - database error');
         }
     }
     
     public function handle_unblock_calendar_time() {
-        check_ajax_referer('calendar_admin_nonce', 'nonce');
-        
-        if (!session_id()) {
+        // Ensure session is started
+        if (session_status() === PHP_SESSION_NONE) {
             session_start();
         }
         
+        // Check standalone authentication
         if (!isset($_SESSION['calendar_admin_logged_in']) || !$_SESSION['calendar_admin_logged_in']) {
-            wp_send_json_error('Not authenticated');
+            wp_send_json_error('Not authenticated - please login first');
+        }
+        
+        if (!isset($_POST['date']) || !isset($_POST['time'])) {
+            wp_send_json_error('Missing date or time parameters');
         }
         
         $date = sanitize_text_field($_POST['date']);
         $time = sanitize_text_field($_POST['time']);
         
+        // Validate date format
+        if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $date)) {
+            wp_send_json_error('Invalid date format');
+        }
+        
+        // Validate time format
+        if (!preg_match('/^\d{2}:\d{2}:\d{2}$/', $time)) {
+            wp_send_json_error('Invalid time format');
+        }
+        
         global $wpdb;
         $availability_table = $wpdb->prefix . 'waxing_availability';
+        
+        // Check if the slot exists first
+        $exists = $wpdb->get_var($wpdb->prepare(
+            "SELECT COUNT(*) FROM $availability_table WHERE date = %s AND time_slot = %s",
+            $date, $time
+        ));
+        
+        if (!$exists) {
+            wp_send_json_error('Time slot does not exist in the system');
+        }
         
         $result = $wpdb->update(
             $availability_table,
@@ -982,10 +1620,84 @@ class WaxingAppointments {
         );
         
         if ($result !== false) {
-            wp_send_json_success('Time slot unblocked');
+            wp_send_json_success('Time slot unblocked successfully');
         } else {
-            wp_send_json_error('Failed to unblock time slot');
+            wp_send_json_error('Failed to unblock time slot - database error');
         }
+    }
+    
+    public function handle_check_time_slot_status() {
+        // Ensure session is started
+        if (session_status() === PHP_SESSION_NONE) {
+            session_start();
+        }
+        
+        // Check standalone authentication
+        if (!isset($_SESSION['calendar_admin_logged_in']) || !$_SESSION['calendar_admin_logged_in']) {
+            wp_send_json_error('Not authenticated - please login first');
+        }
+        
+        if (!isset($_POST['date']) || !isset($_POST['time'])) {
+            wp_send_json_error('Missing date or time parameters');
+        }
+        
+        $date = sanitize_text_field($_POST['date']);
+        $time = sanitize_text_field($_POST['time']);
+        
+        // Validate date format
+        if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $date)) {
+            wp_send_json_error('Invalid date format');
+        }
+        
+        // Validate time format
+        if (!preg_match('/^\d{2}:\d{2}:\d{2}$/', $time)) {
+            wp_send_json_error('Invalid time format');
+        }
+        
+        global $wpdb;
+        $availability_table = $wpdb->prefix . 'waxing_availability';
+        $appointments_table = $wpdb->prefix . 'waxing_appointments';
+        
+        // Check if time slot exists in availability table
+        $availability = $wpdb->get_row($wpdb->prepare(
+            "SELECT is_available FROM $availability_table WHERE date = %s AND time_slot = %s",
+            $date, $time
+        ));
+        
+        if (!$availability) {
+            wp_send_json_error('Time slot not found in system');
+        }
+        
+        // Check if time slot is booked
+        $appointment = $wpdb->get_row($wpdb->prepare(
+            "SELECT id FROM $appointments_table WHERE appointment_date = %s AND appointment_time = %s",
+            $date, $time
+        ));
+        
+        wp_send_json_success(array(
+            'is_available' => (bool)$availability->is_available,
+            'is_booked' => (bool)$appointment
+        ));
+    }
+    
+    public function handle_debug_calendar_session() {
+        // Ensure session is started
+        if (session_status() === PHP_SESSION_NONE) {
+            session_start();
+        }
+        
+        $debug_info = array(
+            'session_status' => session_status(),
+            'session_id' => session_id(),
+            'session_logged_in' => isset($_SESSION['calendar_admin_logged_in']) ? $_SESSION['calendar_admin_logged_in'] : 'not_set',
+            'session_user' => isset($_SESSION['calendar_admin_user']) ? $_SESSION['calendar_admin_user'] : 'not_set',
+            'session_login_time' => isset($_SESSION['calendar_admin_login_time']) ? $_SESSION['calendar_admin_login_time'] : 'not_set',
+            'current_time' => time(),
+            'post_data' => $_POST,
+            'session_data' => $_SESSION
+        );
+        
+        wp_send_json_success($debug_info);
     }
 }
 
