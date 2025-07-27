@@ -218,3 +218,73 @@
         font-size: 14px;
     }
 }
+
+/* Air Datepicker Customization */
+.air-datepicker {
+    border-radius: 8px;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+    border: none;
+    font-family: inherit;
+    z-index: 1001 !important; /* Higher than modal z-index (1000) */
+}
+
+.air-datepicker-cell.-current- {
+    background-color: rgba(255, 107, 107, 0.1);
+    color: #ff6b6b;
+    font-weight: bold;
+}
+
+.air-datepicker-cell.-selected- {
+    background-color: #ff6b6b;
+    color: white;
+}
+
+.air-datepicker-cell.-selected-:hover {
+    background-color: #ff5252;
+}
+
+.air-datepicker-cell:hover {
+    background-color: rgba(255, 107, 107, 0.1);
+    color: #ff6b6b;
+}
+
+.air-datepicker-nav {
+    border-bottom: 1px solid #eee;
+    padding: 10px;
+}
+
+.air-datepicker-nav--title {
+    color: #333;
+    font-weight: bold;
+}
+
+.air-datepicker-nav--action {
+    color: #ff6b6b;
+}
+
+.air-datepicker-nav--action:hover {
+    background-color: rgba(255, 107, 107, 0.1);
+}
+
+.air-datepicker-cell.-disabled- {
+    color: #ccc;
+    background-color: #f8f9fa;
+}
+
+.weekend-disabled {
+    background-color: #f8f9fa !important;
+    color: #ccc !important;
+}
+
+#appointment_date {
+    cursor: pointer;
+    background-color: white;
+}
+
+#appointment_date:focus {
+    border-color: #ff6b6b;
+    box-shadow: 0 0 0 3px rgba(255, 107, 107, 0.1);
+}
+.air-datepicker {
+    z-index: 1001 !important; /* Higher than modal z-index (1000) */
+}

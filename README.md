@@ -4,10 +4,11 @@ A simple WordPress plugin for waxing companies to manage appointment bookings wi
 
 ## Features
 
-- **Fixed Appointment Button**: Floating button on the bottom right of your website
+- **Shortcode Button**: Flexible appointment button placement via `[waxing_appointment_button]`
+- **Beautiful Date Picker**: Air Datepicker integration for intuitive date selection
 - **Modal Popup Form**: Clean, responsive form for booking appointments
 - **Service Selection**: Pre-defined waxing services with pricing (easily customizable)
-- **Date/Time Availability**: Real-time availability checking
+- **Real-time Availability**: Live time slot checking when date is selected
 - **40% Deposit System**: Automatic calculation and payment through WooCommerce
 - **Admin Panel**: View and manage all appointments
 - **Database Integration**: Secure storage of appointments and availability
@@ -84,9 +85,14 @@ Use the shortcode `[waxing_appointment_button]` to display the booking button an
 1. Click the "Book Appointment" button (placed via shortcode)
 2. Fill out the form with personal information
 3. Select desired service
-4. Choose available date and time
-5. Review pricing (40% deposit required)
-6. Complete payment through WooCommerce checkout
+4. **Use the beautiful date picker** to select an appointment date
+   - Click the date field to open Air Datepicker
+   - Weekends are automatically disabled (Mon-Fri only)
+   - Cannot select past dates or dates beyond 60 days
+   - Modern, mobile-friendly interface
+5. Choose from available time slots (automatically loaded)
+6. Review pricing (40% deposit required)
+7. Complete payment through WooCommerce checkout
 
 ### For Administrators
 

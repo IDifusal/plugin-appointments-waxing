@@ -4,9 +4,14 @@ jQuery(document).ready(function($) {
     var span = $('.close');
     var cancelBtn = $('#cancel-appointment');
     var form = $('#appointment-form');
+    var datepicker;
     
     btn.on('click', function() {
         modal.show();
+        // Wait a bit for modal to be visible before initializing datepicker
+        setTimeout(function() {
+            initDatepicker();
+        }, 100);
     });
     
     span.on('click', function() {
@@ -23,6 +28,155 @@ jQuery(document).ready(function($) {
         }
     });
     
+    function initDatepicker() {
+        if (datepicker) {
+            datepicker.destroy();
+        }
+        
+        // Check if AirDatepicker is loaded
+        if (typeof AirDatepicker === 'undefined') {
+            console.error('AirDatepicker not loaded - using fallback');
+            $('#appointment_date').attr('type', 'date');
+            return;
+        } else {
+            console.log('AirDatepicker loaded. Constructor:', AirDatepicker);   
+        }
+        
+        try {
+            console.log('Initializing AirDatepicker...');
+            
+            // Check if element exists and is visible
+            var dateInput = document.getElementById('appointment_date');
+            if (!dateInput) {
+                console.error('Date input element not found');
+                return;
+            }
+            
+            console.log('Date input element found:', dateInput);
+            
+            var today = new Date();
+            var maxDate = new Date();
+            maxDate.setDate(maxDate.getDate() + 60);
+            
+            console.log('Date range:', today, 'to', maxDate);
+            
+            // AirDatepicker configuration with proper event handling
+            datepicker = new AirDatepicker(dateInput, {
+                minDate: today,
+                maxDate: maxDate,
+                autoClose: true,
+                dateFormat: 'mm/dd/yyyy',
+                weekends: [6, 0], // Saturday and Sunday
+                container: '.modal-content', // Ensure datepicker is contained within modal
+                language: 'en', // Set English as default language
+                onSelect: function({date, formattedDate, datepicker}) {
+                    console.log('Date selected:', date, formattedDate);
+                    
+                    // Check if selected date is a weekend
+                    if (date) {
+                        var dayOfWeek = date.getDay();
+                        if (dayOfWeek === 0 || dayOfWeek === 6) {
+                            showError('Please select a weekday (Monday to Friday)');
+                            datepicker.clear();
+                            $('#appointment_time').html('<option value="">Weekends not available</option>');
+                            return;
+                        }
+                        
+                        // Store the selected date and load available times
+                        $('#appointment_date_value').val(formattedDate);
+                        loadTimesForDate(formattedDate);
+                        $('.error-message').remove();
+                    }
+                },
+                onRenderCell: function({date, cellType}) {
+                    // Disable weekends visually
+                    if (cellType === 'day') {
+                        var dayOfWeek = date.getDay();
+                        if (dayOfWeek === 0 || dayOfWeek === 6) {
+                            return {
+                                disabled: true,
+                                classes: 'weekend-disabled',
+                                html: date.getDate()
+                            };
+                        }
+                    }
+                },
+                onShow: function(isFinished) {
+                    if (isFinished) {
+                        console.log('AirDatepicker shown');
+                    }
+                },
+                onHide: function(isFinished) {
+                    if (isFinished) {
+                        console.log('AirDatepicker hidden');
+                    }
+                }
+            });
+            
+            console.log('AirDatepicker instance created:', datepicker);
+            
+        } catch (error) {
+            console.error('AirDatepicker initialization error:', error);
+            // Fallback to native date input with event handler
+            $('#appointment_date').attr('type', 'date');
+            $('#appointment_date').attr('min', today.toISOString().split('T')[0]);
+            $('#appointment_date').attr('max', maxDate.toISOString().split('T')[0]);
+            
+            // Add change event for native date input
+            $('#appointment_date').off('change.fallback').on('change.fallback', function() {
+                var selectedDate = $(this).val();
+                if (selectedDate) {
+                    var date = new Date(selectedDate);
+                    var dayOfWeek = date.getDay();
+                    
+                    if (dayOfWeek === 0 || dayOfWeek === 6) {
+                        showError('Please select a weekday (Monday to Friday)');
+                        $(this).val('');
+                        $('#appointment_time').html('<option value="">Weekends not available</option>');
+                        return;
+                    }
+                    
+                    $('#appointment_date_value').val(selectedDate);
+                    loadTimesForDate(selectedDate);
+                    $('.error-message').remove();
+                }
+            });
+        }
+    }
+    
+    function loadTimesForDate(date) {
+        var timeSelect = $('#appointment_time');
+        timeSelect.html('<option value="">Loading...</option>');
+        
+        $.ajax({
+            url: waxing_ajax.ajax_url,
+            type: 'POST',
+            data: {
+                action: 'check_availability',
+                date: date,
+                nonce: waxing_ajax.nonce
+            },
+            // success: function(response) {
+            //     if (response.success) {
+            //         timeSelect.html('<option value="">Select a time...</option>');
+                    
+            //         if (response.data.length > 0) {
+            //             $.each(response.data, function(index, time) {
+            //                 timeSelect.append('<option value="' + time.value + '">' + time.label + '</option>');
+            //             });
+            //         } else {
+            //             timeSelect.html('<option value="">No times available</option>');
+            //         }
+            //     } else {
+            //         timeSelect.html('<option value="">Error loading times</option>');
+            //     }
+            // },
+            error: function() {
+                timeSelect.html('<option value="">Error loading times</option>');
+            }
+        });
+    }
+    
     $('#service').on('change', function() {
         var selectedOption = $(this).find('option:selected');
         var price = selectedOption.data('price');
@@ -37,45 +191,6 @@ jQuery(document).ready(function($) {
         }
     });
     
-    $('#appointment_date').on('change', function() {
-        var selectedDate = $(this).val();
-        var timeSelect = $('#appointment_time');
-        
-        if (selectedDate) {
-            timeSelect.html('<option value="">Loading...</option>');
-            
-            $.ajax({
-                url: waxing_ajax.ajax_url,
-                type: 'POST',
-                data: {
-                    action: 'check_availability',
-                    date: selectedDate,
-                    nonce: waxing_ajax.nonce
-                },
-                success: function(response) {
-                    if (response.success) {
-                        timeSelect.html('<option value="">Select a time...</option>');
-                        
-                        if (response.data.length > 0) {
-                            $.each(response.data, function(index, time) {
-                                timeSelect.append('<option value="' + time.value + '">' + time.label + '</option>');
-                            });
-                        } else {
-                            timeSelect.html('<option value="">No times available</option>');
-                        }
-                    } else {
-                        timeSelect.html('<option value="">Error loading times</option>');
-                    }
-                },
-                error: function() {
-                    timeSelect.html('<option value="">Error loading times</option>');
-                }
-            });
-        } else {
-            timeSelect.html('<option value="">Select date first...</option>');
-        }
-    });
-    
     form.on('submit', function(e) {
         e.preventDefault();
         
@@ -85,13 +200,16 @@ jQuery(document).ready(function($) {
         submitBtn.text('Processing...').prop('disabled', true);
         $('.error-message').remove();
         
+        // Use the hidden field value for the actual date
+        var appointmentDate = $('#appointment_date_value').val() || $('#appointment_date').val();
+        
         var formData = {
             action: 'book_appointment',
             customer_name: $('#customer_name').val(),
             customer_email: $('#customer_email').val(),
             customer_phone: $('#customer_phone').val(),
             service: $('#service').val(),
-            appointment_date: $('#appointment_date').val(),
+            appointment_date: appointmentDate,
             appointment_time: $('#appointment_time').val(),
             nonce: waxing_ajax.nonce
         };
@@ -173,11 +291,4 @@ jQuery(document).ready(function($) {
         var emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
         return emailRegex.test(email);
     }
-    
-    var today = new Date().toISOString().split('T')[0];
-    $('#appointment_date').attr('min', today);
-    
-    var maxDate = new Date();
-    maxDate.setDate(maxDate.getDate() + 60);
-    $('#appointment_date').attr('max', maxDate.toISOString().split('T')[0]);
 });

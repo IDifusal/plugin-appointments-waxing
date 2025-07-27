@@ -3,7 +3,7 @@
  * Plugin Name: Waxing Appointments
  * Plugin URI: https://difusal.com
  * Description: Simple appointment booking system for waxing services with WooCommerce integration
- * Version: 1.0.3
+ * Version: 1.0.13
  * Author: Difusal
  * License: GPL v2 or later
  * Requires at least: 5.0
@@ -37,6 +37,13 @@ class WaxingAppointments {
         add_action('wp_ajax_nopriv_check_availability', array($this, 'check_availability'));
         add_action('admin_menu', array($this, 'add_admin_menu'));
         add_shortcode('waxing_appointment_button', array($this, 'appointment_button_shortcode'));
+        
+        // Calendar admin route
+        add_action('init', array($this, 'handle_calendar_admin_route'));
+        add_action('wp_ajax_calendar_admin_login', array($this, 'handle_calendar_admin_login'));
+        add_action('wp_ajax_nopriv_calendar_admin_login', array($this, 'handle_calendar_admin_login'));
+        add_action('wp_ajax_block_calendar_time', array($this, 'handle_block_calendar_time'));
+        add_action('wp_ajax_unblock_calendar_time', array($this, 'handle_unblock_calendar_time'));
         
         // WooCommerce hooks for dynamic pricing
         add_action('woocommerce_before_calculate_totals', array($this, 'set_cart_item_price'));
@@ -165,12 +172,18 @@ class WaxingAppointments {
     
     public function enqueue_scripts() {
         wp_enqueue_script('jquery');
-        wp_enqueue_script('waxing-appointments', WAXING_APPOINTMENTS_PLUGIN_URL . 'assets/js/appointments.js', array('jquery'), WAXING_APPOINTMENTS_VERSION, true);
-        wp_enqueue_style('waxing-appointments', WAXING_APPOINTMENTS_PLUGIN_URL . 'assets/css/appointments.css', array(), WAXING_APPOINTMENTS_VERSION);
+        
+        // Enqueue Air Datepicker from CDN
+        wp_enqueue_script('air-datepicker', 'https://cdn.jsdelivr.net/npm/air-datepicker@3.5.3/air-datepicker.min.js', array(), '3.5.3', true);
+        wp_enqueue_style('air-datepicker', 'https://cdn.jsdelivr.net/npm/air-datepicker@3.5.3/air-datepicker.min.css', array(), '3.5.3');
+        
+        wp_enqueue_script('waxing-appointments', WAXING_APPOINTMENTS_PLUGIN_URL . 'assets/js/appointments.js', array('jquery', 'air-datepicker'), WAXING_APPOINTMENTS_VERSION, true);
+        wp_enqueue_style('waxing-appointments', WAXING_APPOINTMENTS_PLUGIN_URL . 'assets/css/appointments.css', array('air-datepicker'), WAXING_APPOINTMENTS_VERSION);
         
         wp_localize_script('waxing-appointments', 'waxing_ajax', array(
             'ajax_url' => admin_url('admin-ajax.php'),
-            'nonce' => wp_create_nonce('waxing_appointments_nonce')
+            'nonce' => wp_create_nonce('waxing_appointments_nonce'),
+            'container' => '.modal-content'
         ));
     }
     
@@ -237,7 +250,8 @@ class WaxingAppointments {
                     
                     <div class="form-group">
                         <label for="appointment_date">Date *</label>
-                        <input type="date" id="appointment_date" name="appointment_date" required min="<?php echo date('Y-m-d'); ?>">
+                        <input type="text" id="appointment_date" name="appointment_date" required placeholder="Select a date..." autocomplete="off">
+                        <input type="hidden" id="appointment_date_value" name="appointment_date_value">
                     </div>
                     
                     <div class="form-group">
@@ -508,6 +522,470 @@ class WaxingAppointments {
             </table>
         </div>
         <?php
+    }
+    
+    public function handle_calendar_admin_route() {
+        if (isset($_GET['calendar-admin']) || (isset($_SERVER['REQUEST_URI']) && strpos($_SERVER['REQUEST_URI'], '/calendar-admin') !== false)) {
+            if (!session_id()) {
+                session_start();
+            }
+            
+            if (!isset($_SESSION['calendar_admin_logged_in']) || !$_SESSION['calendar_admin_logged_in']) {
+                $this->show_calendar_admin_login();
+                exit;
+            } else {
+                $this->show_calendar_admin_dashboard();
+                exit;
+            }
+        }
+    }
+    
+    private function show_calendar_admin_login() {
+        ?>
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <title>Calendar Admin Login</title>
+            <meta name="viewport" content="width=device-width, initial-scale=1">
+            <style>
+                body { 
+                    font-family: Arial, sans-serif; 
+                    background: #f1f1f1; 
+                    margin: 0; 
+                    padding: 50px 0;
+                }
+                .login-container { 
+                    max-width: 400px; 
+                    margin: 0 auto; 
+                    background: white; 
+                    padding: 30px; 
+                    border-radius: 8px; 
+                    box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+                }
+                .login-container h2 { 
+                    text-align: center; 
+                    margin-bottom: 30px; 
+                    color: #333;
+                }
+                .form-group { 
+                    margin-bottom: 20px; 
+                }
+                .form-group label { 
+                    block; 
+                    margin-bottom: 5px; 
+                    color: #555;
+                }
+                .form-group input { 
+                    width: 100%; 
+                    padding: 12px; 
+                    border: 1px solid #ddd; 
+                    border-radius: 4px; 
+                    box-sizing: border-box;
+                }
+                .login-btn { 
+                    width: 100%; 
+                    padding: 12px; 
+                    background: #0073aa; 
+                    color: white; 
+                    border: none; 
+                    border-radius: 4px; 
+                    cursor: pointer; 
+                    font-size: 16px;
+                }
+                .login-btn:hover { 
+                    background: #005a87; 
+                }
+                .error { 
+                    color: #d63638; 
+                    margin-bottom: 15px; 
+                    text-align: center;
+                }
+            </style>
+            <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+        </head>
+        <body>
+            <div class="login-container">
+                <h2>Calendar Admin Login</h2>
+                <div id="error-message" class="error" style="display:none;"></div>
+                <form id="admin-login-form">
+                    <div class="form-group">
+                        <label for="username">Username</label>
+                        <input type="text" id="username" name="username" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="password">Password</label>
+                        <input type="password" id="password" name="password" required>
+                    </div>
+                    <button type="submit" class="login-btn">Login</button>
+                </form>
+            </div>
+            
+            <script>
+            jQuery(document).ready(function($) {
+                $('#admin-login-form').on('submit', function(e) {
+                    e.preventDefault();
+                    
+                    $.ajax({
+                        url: '<?php echo admin_url('admin-ajax.php'); ?>',
+                        type: 'POST',
+                        data: {
+                            action: 'calendar_admin_login',
+                            username: $('#username').val(),
+                            password: $('#password').val(),
+                            nonce: '<?php echo wp_create_nonce('calendar_admin_nonce'); ?>'
+                        },
+                        success: function(response) {
+                            if (response.success) {
+                                location.reload();
+                            } else {
+                                $('#error-message').text(response.data).show();
+                            }
+                        }
+                    });
+                });
+            });
+            </script>
+        </body>
+        </html>
+        <?php
+    }
+    
+    public function handle_calendar_admin_login() {
+        check_ajax_referer('calendar_admin_nonce', 'nonce');
+        
+        $username = sanitize_text_field($_POST['username']);
+        $password = sanitize_text_field($_POST['password']);
+        
+        // Simple hardcoded credentials (you can make this configurable later)
+        if ($username === 'admin' && $password === 'waxing2024') {
+            if (!session_id()) {
+                session_start();
+            }
+            $_SESSION['calendar_admin_logged_in'] = true;
+            wp_send_json_success('Login successful');
+        } else {
+            wp_send_json_error('Invalid credentials');
+        }
+    }
+    
+    private function show_calendar_admin_dashboard() {
+        global $wpdb;
+        $appointments_table = $wpdb->prefix . 'waxing_appointments';
+        $availability_table = $wpdb->prefix . 'waxing_availability';
+        
+        // Get upcoming appointments
+        $appointments = $wpdb->get_results($wpdb->prepare(
+            "SELECT * FROM $appointments_table WHERE appointment_date >= %s ORDER BY appointment_date, appointment_time",
+            date('Y-m-d')
+        ));
+        
+        // Get availability for next 30 days
+        $availability = $wpdb->get_results($wpdb->prepare(
+            "SELECT * FROM $availability_table WHERE date >= %s AND date <= %s ORDER BY date, time_slot",
+            date('Y-m-d'),
+            date('Y-m-d', strtotime('+30 days'))
+        ));
+        
+        ?>
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <title>Calendar Admin Dashboard</title>
+            <meta name="viewport" content="width=device-width, initial-scale=1">
+            <style>
+                body { 
+                    font-family: Arial, sans-serif; 
+                    margin: 0; 
+                    padding: 20px; 
+                    background: #f1f1f1;
+                }
+                .header { 
+                    background: white; 
+                    padding: 20px; 
+                    margin-bottom: 20px; 
+                    border-radius: 8px; 
+                    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+                    display: flex; 
+                    justify-content: space-between; 
+                    align-items: center;
+                }
+                .logout-btn { 
+                    background: #d63638; 
+                    color: white; 
+                    padding: 8px 16px; 
+                    text-decoration: none; 
+                    border-radius: 4px;
+                }
+                .dashboard-grid { 
+                    display: grid; 
+                    grid-template-columns: 1fr 1fr; 
+                    gap: 20px;
+                }
+                .panel { 
+                    background: white; 
+                    padding: 20px; 
+                    border-radius: 8px; 
+                    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+                }
+                .panel h3 { 
+                    margin-top: 0; 
+                    color: #333;
+                }
+                .appointment-item { 
+                    padding: 10px; 
+                    border-left: 4px solid #0073aa; 
+                    margin-bottom: 10px; 
+                    background: #f9f9f9;
+                }
+                .calendar-day { 
+                    border: 1px solid #ddd; 
+                    margin-bottom: 15px; 
+                    background: #fff;
+                }
+                .calendar-day-header { 
+                    background: #0073aa; 
+                    color: white; 
+                    padding: 10px; 
+                    font-weight: bold;
+                }
+                .time-slot { 
+                    padding: 8px 12px; 
+                    border-bottom: 1px solid #eee; 
+                    display: flex; 
+                    justify-content: space-between; 
+                    align-items: center;
+                }
+                .time-slot.blocked { 
+                    background: #ffecec; 
+                    color: #d63638;
+                }
+                .time-slot.booked { 
+                    background: #e6f3ff; 
+                    color: #0073aa;
+                }
+                .block-btn { 
+                    background: #d63638; 
+                    color: white; 
+                    border: none; 
+                    padding: 4px 8px; 
+                    border-radius: 3px; 
+                    cursor: pointer; 
+                    font-size: 12px;
+                }
+                .unblock-btn { 
+                    background: #00a32a; 
+                    color: white; 
+                    border: none; 
+                    padding: 4px 8px; 
+                    border-radius: 3px; 
+                    cursor: pointer; 
+                    font-size: 12px;
+                }
+                @media (max-width: 768px) {
+                    .dashboard-grid { 
+                        grid-template-columns: 1fr; 
+                    }
+                }
+            </style>
+            <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+        </head>
+        <body>
+            <div class="header">
+                <h1>Calendar Admin Dashboard</h1>
+                <a href="?logout=1" class="logout-btn">Logout</a>
+            </div>
+            
+            <div class="dashboard-grid">
+                <div class="panel">
+                    <h3>Upcoming Appointments</h3>
+                    <?php if (empty($appointments)): ?>
+                        <p>No upcoming appointments</p>
+                    <?php else: ?>
+                        <?php foreach ($appointments as $appointment): ?>
+                            <div class="appointment-item">
+                                <strong><?php echo esc_html($appointment->customer_name); ?></strong><br>
+                                <small><?php echo esc_html(str_replace('_', ' ', ucwords($appointment->service_id))); ?></small><br>
+                                <?php echo date('M j, Y', strtotime($appointment->appointment_date)); ?> at 
+                                <?php echo date('g:i A', strtotime($appointment->appointment_time)); ?><br>
+                                <small>Status: <?php echo esc_html($appointment->status); ?></small>
+                            </div>
+                        <?php endforeach; ?>
+                    <?php endif; ?>
+                </div>
+                
+                <div class="panel">
+                    <h3>Calendar Schedule Management</h3>
+                    <p>Click to block/unblock time slots:</p>
+                    
+                    <?php
+                    $current_date = '';
+                    $booked_slots = array();
+                    
+                    // Create array of booked slots
+                    foreach ($appointments as $appointment) {
+                        $key = $appointment->appointment_date . '_' . $appointment->appointment_time;
+                        $booked_slots[$key] = $appointment;
+                    }
+                    
+                    foreach ($availability as $slot):
+                        if ($current_date !== $slot->date):
+                            if ($current_date !== '') echo '</div>';
+                            $current_date = $slot->date;
+                            ?>
+                            <div class="calendar-day">
+                                <div class="calendar-day-header">
+                                    <?php echo date('l, M j, Y', strtotime($slot->date)); ?>
+                                </div>
+                        <?php endif; 
+                        
+                        $slot_key = $slot->date . '_' . $slot->time_slot;
+                        $is_booked = isset($booked_slots[$slot_key]);
+                        $class = $is_booked ? 'booked' : ($slot->is_available ? '' : 'blocked');
+                        ?>
+                        
+                        <div class="time-slot <?php echo $class; ?>">
+                            <span>
+                                <?php echo date('g:i A', strtotime($slot->time_slot)); ?>
+                                <?php if ($is_booked): ?>
+                                    - Booked by <?php echo esc_html($booked_slots[$slot_key]->customer_name); ?>
+                                <?php elseif (!$slot->is_available): ?>
+                                    - Blocked
+                                <?php endif; ?>
+                            </span>
+                            
+                            <?php if (!$is_booked): ?>
+                                <?php if ($slot->is_available): ?>
+                                    <button class="block-btn" onclick="blockTimeSlot('<?php echo $slot->date; ?>', '<?php echo $slot->time_slot; ?>')">
+                                        Block
+                                    </button>
+                                <?php else: ?>
+                                    <button class="unblock-btn" onclick="unblockTimeSlot('<?php echo $slot->date; ?>', '<?php echo $slot->time_slot; ?>')">
+                                        Unblock
+                                    </button>
+                                <?php endif; ?>
+                            <?php endif; ?>
+                        </div>
+                    <?php endforeach; ?>
+                    </div>
+                </div>
+            </div>
+            
+            <script>
+            function blockTimeSlot(date, time) {
+                $.ajax({
+                    url: '<?php echo admin_url('admin-ajax.php'); ?>',
+                    type: 'POST',
+                    data: {
+                        action: 'block_calendar_time',
+                        date: date,
+                        time: time,
+                        nonce: '<?php echo wp_create_nonce('calendar_admin_nonce'); ?>'
+                    },
+                    success: function(response) {
+                        if (response.success) {
+                            location.reload();
+                        } else {
+                            alert('Error: ' + response.data);
+                        }
+                    }
+                });
+            }
+            
+            function unblockTimeSlot(date, time) {
+                $.ajax({
+                    url: '<?php echo admin_url('admin-ajax.php'); ?>',
+                    type: 'POST',
+                    data: {
+                        action: 'unblock_calendar_time',
+                        date: date,
+                        time: time,
+                        nonce: '<?php echo wp_create_nonce('calendar_admin_nonce'); ?>'
+                    },
+                    success: function(response) {
+                        if (response.success) {
+                            location.reload();
+                        } else {
+                            alert('Error: ' + response.data);
+                        }
+                    }
+                });
+            }
+            </script>
+        </body>
+        </html>
+        <?php
+        
+        // Handle logout
+        if (isset($_GET['logout'])) {
+            session_start();
+            session_destroy();
+            wp_redirect(home_url('/calendar-admin'));
+            exit;
+        }
+    }
+    
+    public function handle_block_calendar_time() {
+        check_ajax_referer('calendar_admin_nonce', 'nonce');
+        
+        if (!session_id()) {
+            session_start();
+        }
+        
+        if (!isset($_SESSION['calendar_admin_logged_in']) || !$_SESSION['calendar_admin_logged_in']) {
+            wp_send_json_error('Not authenticated');
+        }
+        
+        $date = sanitize_text_field($_POST['date']);
+        $time = sanitize_text_field($_POST['time']);
+        
+        global $wpdb;
+        $availability_table = $wpdb->prefix . 'waxing_availability';
+        
+        $result = $wpdb->update(
+            $availability_table,
+            array('is_available' => 0),
+            array('date' => $date, 'time_slot' => $time),
+            array('%d'),
+            array('%s', '%s')
+        );
+        
+        if ($result !== false) {
+            wp_send_json_success('Time slot blocked');
+        } else {
+            wp_send_json_error('Failed to block time slot');
+        }
+    }
+    
+    public function handle_unblock_calendar_time() {
+        check_ajax_referer('calendar_admin_nonce', 'nonce');
+        
+        if (!session_id()) {
+            session_start();
+        }
+        
+        if (!isset($_SESSION['calendar_admin_logged_in']) || !$_SESSION['calendar_admin_logged_in']) {
+            wp_send_json_error('Not authenticated');
+        }
+        
+        $date = sanitize_text_field($_POST['date']);
+        $time = sanitize_text_field($_POST['time']);
+        
+        global $wpdb;
+        $availability_table = $wpdb->prefix . 'waxing_availability';
+        
+        $result = $wpdb->update(
+            $availability_table,
+            array('is_available' => 1),
+            array('date' => $date, 'time_slot' => $time),
+            array('%d'),
+            array('%s', '%s')
+        );
+        
+        if ($result !== false) {
+            wp_send_json_success('Time slot unblocked');
+        } else {
+            wp_send_json_error('Failed to unblock time slot');
+        }
     }
 }
 
