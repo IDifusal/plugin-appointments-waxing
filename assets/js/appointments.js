@@ -13,6 +13,15 @@ jQuery(document).ready(function($) {
             initDatepicker();
         }, 100);
     });
+
+    // Support triggering the modal from any element with class 'waxing_appointment_button'
+    $(document).on('click', '.waxing_appointment_button', function(e) {
+        e.preventDefault();
+        modal.show();
+        setTimeout(function() {
+            initDatepicker();
+        }, 100);
+    });
     
     span.on('click', function() {
         modal.hide();
@@ -65,10 +74,10 @@ jQuery(document).ready(function($) {
                 minDate: today,
                 maxDate: maxDate,
                 autoClose: true,
-                dateFormat: 'mm/dd/yyyy',
+                dateFormat: 'MM/dd/yyyy',
                 weekends: [6, 0], // Saturday and Sunday
                 container: '.modal-content', // Ensure datepicker is contained within modal
-                language: 'en', // Set English as default language
+                locale: AirDatepicker.locale.en, // Set English as default language
                 onSelect: function({date, formattedDate, datepicker}) {
                     console.log('Date selected:', date, formattedDate);
                     
@@ -82,9 +91,10 @@ jQuery(document).ready(function($) {
                             return;
                         }
                         
-                        // Store the selected date and load available times
-                        $('#appointment_date_value').val(formattedDate);
-                        loadTimesForDate(formattedDate);
+                        // Store ISO date (YYYY-MM-DD) and load available times using ISO
+                        var isoDate = date.toISOString().split('T')[0];
+                        $('#appointment_date_value').val(isoDate);
+                        loadTimesForDate(isoDate);
                         $('.error-message').remove();
                     }
                 },
@@ -156,21 +166,20 @@ jQuery(document).ready(function($) {
                 date: date,
                 nonce: waxing_ajax.nonce
             },
-            // success: function(response) {
-            //     if (response.success) {
-            //         timeSelect.html('<option value="">Select a time...</option>');
-                    
-            //         if (response.data.length > 0) {
-            //             $.each(response.data, function(index, time) {
-            //                 timeSelect.append('<option value="' + time.value + '">' + time.label + '</option>');
-            //             });
-            //         } else {
-            //             timeSelect.html('<option value="">No times available</option>');
-            //         }
-            //     } else {
-            //         timeSelect.html('<option value="">Error loading times</option>');
-            //     }
-            // },
+            success: function(response) {
+                if (response && response.success) {
+                    timeSelect.html('<option value="">Select a time...</option>');
+                    if (Array.isArray(response.data) && response.data.length > 0) {
+                        $.each(response.data, function(index, time) {
+                            timeSelect.append('<option value="' + time.value + '">' + time.label + '</option>');
+                        });
+                    } else {
+                        timeSelect.html('<option value="">No times available</option>');
+                    }
+                } else {
+                    timeSelect.html('<option value="">Error loading times</option>');
+                }
+            },
             error: function() {
                 timeSelect.html('<option value="">Error loading times</option>');
             }
@@ -182,7 +191,7 @@ jQuery(document).ready(function($) {
         var price = selectedOption.data('price');
         
         if (price) {
-            var deposit = Math.round(price * 0.4 * 100) / 100;
+            var deposit = Math.round(price * 0.2 * 100) / 100; // 20% deposit
             $('#total-price').text(price);
             $('#deposit-price').text(deposit.toFixed(2));
             $('#price-summary').show();

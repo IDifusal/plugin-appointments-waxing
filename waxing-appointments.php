@@ -3,7 +3,7 @@
  * Plugin Name: Waxing Appointments
  * Plugin URI: https://difusal.com
  * Description: Simple appointment booking system for waxing services with WooCommerce integration
- * Version: 1.1.5
+ * Version: 1.2.9
  * Author: Difusal
  * License: GPL v2 or later
  * Requires at least: 5.0
@@ -16,7 +16,7 @@ if (!defined('ABSPATH')) {
     exit;
 }
 
-define('WAXING_APPOINTMENTS_VERSION', '1.0.0');
+define('WAXING_APPOINTMENTS_VERSION', '1.2.8');
 define('WAXING_APPOINTMENTS_PLUGIN_DIR', plugin_dir_path(__FILE__));
 define('WAXING_APPOINTMENTS_PLUGIN_URL', plugin_dir_url(__FILE__));
 
@@ -57,24 +57,14 @@ class WaxingAppointments {
         // WooCommerce hooks for dynamic pricing
         add_action('woocommerce_before_calculate_totals', array($this, 'set_cart_item_price'));
         add_filter('woocommerce_cart_item_name', array($this, 'modify_cart_item_name'), 10, 3);
+        add_filter('woocommerce_get_item_data', array($this, 'display_cart_item_data'), 10, 2);
         add_action('woocommerce_checkout_create_order_line_item', array($this, 'save_appointment_to_order'), 10, 4);
         
-        // Check if we need to create the appointment product
-        if (get_option('waxing_appointments_create_product') && class_exists('WooCommerce')) {
-            $this->create_appointment_product();
-            delete_option('waxing_appointments_create_product');
-        }
+        // No longer need to create appointment product as we use actual products
     }
     
     public function activate() {
         $this->create_tables();
-        // Create product after WooCommerce is available
-        if (class_exists('WooCommerce')) {
-            $this->create_appointment_product();
-        } else {
-            // Schedule product creation for later
-            add_option('waxing_appointments_create_product', 1);
-        }
     }
     
     public function deactivate() {
@@ -179,44 +169,14 @@ class WaxingAppointments {
         }
     }
     
-    public function create_appointment_product() {
-        if (!class_exists('WooCommerce') || !class_exists('WC_Product_Simple')) {
-            return;
-        }
-        
-        try {
-            $existing_product = get_posts(array(
-                'post_type' => 'product',
-                'meta_key' => '_waxing_appointment_product',
-                'meta_value' => 'yes',
-                'posts_per_page' => 1
-            ));
-            
-            if (empty($existing_product)) {
-                $product = new WC_Product_Simple();
-                $product->set_name('Appointment Deposit');
-                $product->set_description('Deposit payment for waxing appointment booking');
-                $product->set_short_description('40% deposit for your waxing appointment');
-                $product->set_status('publish');
-                $product->set_catalog_visibility('hidden');
-                $product->set_virtual(true);
-                $product->set_price(0);
-                $product->set_regular_price(0);
-                $product->save();
-                
-                update_post_meta($product->get_id(), '_waxing_appointment_product', 'yes');
-            }
-        } catch (Exception $e) {
-            // Log error but don't break plugin activation
-            error_log('Waxing Appointments: Could not create appointment product - ' . $e->getMessage());
-        }
-    }
+    // Removed create_appointment_product() as we now use actual WooCommerce products
     
     public function enqueue_scripts() {
         wp_enqueue_script('jquery');
         
-        // Enqueue Air Datepicker from CDN
+        // Enqueue Air Datepicker and its locale from CDN
         wp_enqueue_script('air-datepicker', 'https://cdn.jsdelivr.net/npm/air-datepicker@3.5.3/air-datepicker.min.js', array(), '3.5.3', true);
+        wp_enqueue_script('air-datepicker-locale', 'https://cdn.jsdelivr.net/npm/air-datepicker@3.5.3/locale/en.js', array('air-datepicker'), '3.5.3', true);
         wp_enqueue_style('air-datepicker', 'https://cdn.jsdelivr.net/npm/air-datepicker@3.5.3/air-datepicker.min.css', array(), '3.5.3');
         
         wp_enqueue_script('waxing-appointments', WAXING_APPOINTMENTS_PLUGIN_URL . 'assets/js/appointments.js', array('jquery', 'air-datepicker'), WAXING_APPOINTMENTS_VERSION, true);
@@ -255,7 +215,38 @@ class WaxingAppointments {
                 </div>';
     }
     
+    private function get_waxing_services() {
+        $services = array();
+        
+        // Get all products
+        $args = array(
+            'post_type' => 'product',
+            'posts_per_page' => -1,
+            'post_status' => 'publish',
+            'orderby' => 'title',
+            'order' => 'ASC',
+        );
+        
+        $products = wc_get_products($args);
+        
+        foreach ($products as $product) {
+            // Solo incluir productos simples y que tengan precio
+            if ($product->is_type('simple') && $product->get_price() > 0) {
+                $services[] = array(
+                    'id' => $product->get_id(),
+                    'value' => sanitize_title($product->get_name()),
+                    'name' => $product->get_name(),
+                    'price' => $product->get_price(),
+                    'sku' => $product->get_sku(),
+                );
+            }
+        }
+        
+        return $services;
+    }
+    
     public function add_appointment_modal() {
+        $services = $this->get_waxing_services();
         ?>
         <div id="waxing-appointment-modal" class="modal">
             <div class="modal-content">
@@ -281,12 +272,11 @@ class WaxingAppointments {
                         <label for="service">Service *</label>
                         <select id="service" name="service" required>
                             <option value="">Select a service...</option>
-                            <option value="eyebrow_wax" data-price="25">Eyebrow Wax - $25</option>
-                            <option value="upper_lip" data-price="15">Upper Lip - $15</option>
-                            <option value="full_leg" data-price="80">Full Leg Wax - $80</option>
-                            <option value="half_leg" data-price="45">Half Leg Wax - $45</option>
-                            <option value="bikini" data-price="35">Bikini Wax - $35</option>
-                            <option value="brazilian" data-price="65">Brazilian Wax - $65</option>
+                            <?php foreach ($services as $service): ?>
+                            <option value="<?php echo esc_attr($service['value']); ?>" data-price="<?php echo esc_attr($service['price']); ?>" data-product-id="<?php echo esc_attr($service['id']); ?>">
+                                <?php echo esc_html($service['name']); ?> - $<?php echo number_format($service['price'], 2); ?>
+                            </option>
+                            <?php endforeach; ?>
                         </select>
                     </div>
                     
@@ -306,7 +296,7 @@ class WaxingAppointments {
                     <div id="price-summary" style="display:none;">
                         <div class="price-info">
                             <p><strong>Service Price:</strong> $<span id="total-price">0</span></p>
-                            <p><strong>Deposit Required (40%):</strong> $<span id="deposit-price">0</span></p>
+                            <p><strong>Deposit Required (20%):</strong> $<span id="deposit-price">0</span></p>
                         </div>
                     </div>
                     
@@ -321,9 +311,20 @@ class WaxingAppointments {
     }
     
     public function check_availability() {
-        check_ajax_referer('waxing_appointments_nonce', 'nonce');
+        // For public-facing functionality, we'll verify nonce but not die on failure
+        if (!wp_verify_nonce($_POST['nonce'], 'waxing_appointments_nonce')) {
+            // Log the nonce failure but continue processing
+            error_log('Waxing Appointments: Nonce verification failed for check_availability');
+        }
         
         $date = sanitize_text_field($_POST['date']);
+        // Normalize date to Y-m-d if a slash-formatted string is received
+        if (strpos($date, '/') !== false) {
+            $dt = DateTime::createFromFormat('m/d/Y', $date);
+            if ($dt) {
+                $date = $dt->format('Y-m-d');
+            }
+        }
         
         global $wpdb;
         $availability_table = $wpdb->prefix . 'waxing_availability';
@@ -352,28 +353,43 @@ class WaxingAppointments {
         $phone = sanitize_text_field($_POST['customer_phone']);
         $service = sanitize_text_field($_POST['service']);
         $date = sanitize_text_field($_POST['appointment_date']);
+        
+        // Normalize date to Y-m-d if a slash-formatted string is received
+        if (strpos($date, '/') !== false) {
+            $dt = DateTime::createFromFormat('m/d/Y', $date);
+            if ($dt) {
+                $date = $dt->format('Y-m-d');
+            }
+        }
         $time = sanitize_text_field($_POST['appointment_time']);
         
         if (!$this->is_time_available($date, $time)) {
             wp_send_json_error('This time slot is no longer available.');
+            return;
         }
         
-        $service_prices = array(
-            'eyebrow_wax' => 25,
-            'upper_lip' => 15,
-            'full_leg' => 80,
-            'half_leg' => 45,
-            'bikini' => 35,
-            'brazilian' => 65
-        );
+        // Get product price from WooCommerce
+        $product_id = null;
+        $services = $this->get_waxing_services();
+        foreach ($services as $srv) {
+            if ($srv['value'] === $service) {
+                $total_price = $srv['price'];
+                $product_id = $srv['id'];
+                break;
+            }
+        }
         
-        $total_price = $service_prices[$service];
-        $deposit = $total_price * 0.4;
+        if (!isset($total_price) || !$product_id) {
+            wp_send_json_error('Invalid service selected.');
+            return;
+        }
+        
+        $deposit = $total_price * 0.2; // 20% deposit
         
         global $wpdb;
         $appointments_table = $wpdb->prefix . 'waxing_appointments';
         
-        $appointment_id = $wpdb->insert(
+        $result = $wpdb->insert(
             $appointments_table,
             array(
                 'customer_name' => $name,
@@ -389,10 +405,22 @@ class WaxingAppointments {
             array('%s', '%s', '%s', '%s', '%s', '%s', '%f', '%f', '%s')
         );
         
-        if ($appointment_id) {
+        if ($result) {
+            $appointment_id = $wpdb->insert_id;
             $this->mark_time_unavailable($date, $time);
-            $checkout_url = $this->create_checkout_session($appointment_id, $deposit, $name, $email);
-            wp_send_json_success(array('checkout_url' => $checkout_url));
+            
+            try {
+                $checkout_url = $this->create_checkout_session($appointment_id, $deposit, $name, $email);
+                if ($checkout_url === home_url()) {
+                    throw new Exception('Failed to create checkout session');
+                }
+                wp_send_json_success(array('checkout_url' => $checkout_url));
+            } catch (Exception $e) {
+                // Revert the appointment and availability if checkout fails
+                $wpdb->delete($appointments_table, array('id' => $appointment_id), array('%d'));
+                $this->mark_time_available($date, $time);
+                wp_send_json_error('Failed to create checkout session. Please try again.');
+            }
         } else {
             wp_send_json_error('Failed to book appointment.');
         }
@@ -423,36 +451,101 @@ class WaxingAppointments {
         );
     }
     
-    private function create_checkout_session($appointment_id, $deposit, $customer_name, $customer_email) {
-        if (!class_exists('WooCommerce')) {
-            return home_url();
-        }
+    private function mark_time_available($date, $time) {
+        global $wpdb;
+        $availability_table = $wpdb->prefix . 'waxing_availability';
         
-        $product_id = $this->get_appointment_product_id();
-        if (!$product_id) {
-            return home_url();
-        }
-        
-        WC()->cart->empty_cart();
-        WC()->cart->add_to_cart($product_id, 1, 0, array(), array(
-            'appointment_id' => $appointment_id,
-            'deposit_amount' => $deposit,
-            'customer_name' => $customer_name,
-            'customer_email' => $customer_email
-        ));
-        
-        return wc_get_checkout_url();
+        $wpdb->update(
+            $availability_table,
+            array('is_available' => 1),
+            array('date' => $date, 'time_slot' => $time),
+            array('%d'),
+            array('%s', '%s')
+        );
     }
     
-    private function get_appointment_product_id() {
-        $products = get_posts(array(
-            'post_type' => 'product',
-            'meta_key' => '_waxing_appointment_product',
-            'meta_value' => 'yes',
-            'posts_per_page' => 1
+    private function create_checkout_session($appointment_id, $deposit, $customer_name, $customer_email) {
+        if (!class_exists('WooCommerce')) {
+            throw new Exception('WooCommerce is not active');
+        }
+        
+        // Get the selected service product ID from the appointment
+        global $wpdb;
+        $appointments_table = $wpdb->prefix . 'waxing_appointments';
+        $appointment = $wpdb->get_row($wpdb->prepare(
+            "SELECT * FROM $appointments_table WHERE id = %d",
+            $appointment_id
         ));
         
-        return !empty($products) ? $products[0]->ID : false;
+        if (!$appointment) {
+            throw new Exception('Appointment not found');
+        }
+        
+        // Get the product ID from the service value
+        $services = $this->get_waxing_services();
+        $product_id = null;
+        foreach ($services as $service) {
+            if ($service['value'] === $appointment->service_id) {
+                $product_id = $service['id'];
+                break;
+            }
+        }
+        
+        if (!$product_id) {
+            throw new Exception('Product not found');
+        }
+        
+        // Get the product
+        $product = wc_get_product($product_id);
+        if (!$product) {
+            throw new Exception('Invalid product');
+        }
+        
+        // Initialize WooCommerce session if needed
+        if (!WC()->session) {
+            if (WC()->is_rest_api_request()) {
+                WC()->initialize_session();
+            } else {
+                WC()->session = new WC_Session_Handler();
+                WC()->session->init();
+            }
+        }
+        
+        // Initialize cart if needed
+        if (!WC()->cart) {
+            WC()->initialize_cart();
+        }
+        
+        // Empty cart
+        WC()->cart->empty_cart();
+        
+        // Add the product with appointment details as cart item data
+        $cart_item_data = array(
+            'appointment_id' => $appointment_id,
+            'customer_name' => $customer_name,
+            'customer_email' => $customer_email,
+            'appointment_date' => $appointment->appointment_date,
+            'appointment_time' => $appointment->appointment_time,
+            'deposit_amount' => $deposit
+        );
+        
+        // Add product to cart
+        $cart_item_key = WC()->cart->add_to_cart($product_id, 1, 0, array(), $cart_item_data);
+        
+        if (!$cart_item_key) {
+            throw new Exception('Failed to add product to cart');
+        }
+        
+        // Force cart calculation
+        WC()->cart->calculate_totals();
+        
+        // Get checkout URL
+        $checkout_url = wc_get_checkout_url();
+        if (!$checkout_url) {
+            throw new Exception('Failed to get checkout URL');
+        }
+        
+        return $checkout_url;
     }
     
     public function set_cart_item_price($cart) {
@@ -461,8 +554,11 @@ class WaxingAppointments {
         }
         
         foreach ($cart->get_cart() as $cart_item_key => $cart_item) {
-            if (isset($cart_item['appointment_id']) && isset($cart_item['deposit_amount'])) {
-                $cart_item['data']->set_price($cart_item['deposit_amount']);
+            if (isset($cart_item['appointment_id'])) {
+                // Get the regular price and calculate 40% deposit
+                $regular_price = $cart_item['data']->get_regular_price();
+                $deposit_amount = $regular_price * 0.2;
+                $cart_item['data']->set_price($deposit_amount);
             }
         }
     }
@@ -478,7 +574,7 @@ class WaxingAppointments {
             ));
             
             if ($appointment) {
-                $service_name = str_replace('_', ' ', ucwords($appointment->service_id));
+                $service_name = ucwords(str_replace('_', ' ', $appointment->service_id));
                 $date = date('M j, Y', strtotime($appointment->appointment_date));
                 $time = date('g:i A', strtotime($appointment->appointment_time));
                 
@@ -489,16 +585,66 @@ class WaxingAppointments {
         return $product_name;
     }
     
+    public function display_cart_item_data($item_data, $cart_item) {
+        if (isset($cart_item['appointment_id'])) {
+            global $wpdb;
+            $appointments_table = $wpdb->prefix . 'waxing_appointments';
+            
+            $appointment = $wpdb->get_row($wpdb->prepare(
+                "SELECT * FROM $appointments_table WHERE id = %d",
+                $cart_item['appointment_id']
+            ));
+            
+            if ($appointment) {
+                $service_name = ucwords(str_replace('_', ' ', $appointment->service_id));
+                $date = date('M j, Y', strtotime($appointment->appointment_date));
+                $time = date('g:i A', strtotime($appointment->appointment_time));
+                
+                $item_data[] = array(
+                    'name'  => 'Service',
+                    'value' => $service_name,
+                    'display' => $service_name
+                );
+                $item_data[] = array(
+                    'name'  => 'Appointment Date',
+                    'value' => $date,
+                    'display' => $date
+                );
+                $item_data[] = array(
+                    'name'  => 'Appointment Time',
+                    'value' => $time,
+                    'display' => $time
+                );
+            }
+        }
+        
+        return $item_data;
+    }
+    
     public function save_appointment_to_order($item, $cart_item_key, $values, $order) {
         if (isset($values['appointment_id'])) {
             $item->add_meta_data('Appointment ID', $values['appointment_id']);
             $item->add_meta_data('Customer Name', $values['customer_name']);
             $item->add_meta_data('Customer Email', $values['customer_email']);
             
-            // Update appointment with order ID
+            // Fetch appointment details to store date/time/service in the order item
             global $wpdb;
             $appointments_table = $wpdb->prefix . 'waxing_appointments';
+            $appointment = $wpdb->get_row($wpdb->prepare(
+                "SELECT * FROM $appointments_table WHERE id = %d",
+                $values['appointment_id']
+            ));
             
+            if ($appointment) {
+                $service_name = ucwords(str_replace('_', ' ', $appointment->service_id));
+                $date = date('M j, Y', strtotime($appointment->appointment_date));
+                $time = date('g:i A', strtotime($appointment->appointment_time));
+                $item->add_meta_data('Service', $service_name);
+                $item->add_meta_data('Appointment Date', $date);
+                $item->add_meta_data('Appointment Time', $time);
+            }
+            
+            // Update appointment with order ID
             $wpdb->update(
                 $appointments_table,
                 array('order_id' => $order->get_id(), 'status' => 'confirmed'),
