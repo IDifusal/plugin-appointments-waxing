@@ -1,10 +1,20 @@
 jQuery(document).ready(function($) {
     var modal = $('#waxing-appointment-modal');
+    var loadingModal = $('#waxing-loading-modal');
     var btn = $('.btn-book-appointment');
     var span = $('.close');
     var cancelBtn = $('#cancel-appointment');
     var form = $('#appointment-form');
     var datepicker;
+    
+    // Function to show/hide loading modal
+    function showLoading(show = true) {
+        if (show) {
+            loadingModal.show();
+        } else {
+            loadingModal.hide();
+        }
+    }
     
     btn.on('click', function() {
         modal.show();
@@ -157,6 +167,7 @@ jQuery(document).ready(function($) {
     function loadTimesForDate(date) {
         var timeSelect = $('#appointment_time');
         timeSelect.html('<option value="">Loading...</option>');
+        showLoading(true);
         
         $.ajax({
             url: waxing_ajax.ajax_url,
@@ -179,9 +190,11 @@ jQuery(document).ready(function($) {
                 } else {
                     timeSelect.html('<option value="">Error loading times</option>');
                 }
+                showLoading(false);
             },
             error: function() {
                 timeSelect.html('<option value="">Error loading times</option>');
+                showLoading(false);
             }
         });
     }
@@ -208,6 +221,7 @@ jQuery(document).ready(function($) {
         
         submitBtn.text('Processing...').prop('disabled', true);
         $('.error-message').remove();
+        showLoading(true);
         
         // Use the hidden field value for the actual date
         var appointmentDate = $('#appointment_date_value').val() || $('#appointment_date').val();
@@ -234,15 +248,18 @@ jQuery(document).ready(function($) {
             data: formData,
             success: function(response) {
                 if (response.success) {
+                    showLoading(false);
                     window.location.href = response.data.checkout_url;
                 } else {
                     showError(response.data || 'An error occurred while booking your appointment.');
                     submitBtn.text(originalText).prop('disabled', false);
+                    showLoading(false);
                 }
             },
             error: function() {
                 showError('Network error. Please try again.');
                 submitBtn.text(originalText).prop('disabled', false);
+                showLoading(false);
             }
         });
     });

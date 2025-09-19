@@ -3,7 +3,7 @@
  * Plugin Name: Waxing Appointments
  * Plugin URI: https://difusal.com
  * Description: Simple appointment booking system for waxing services with WooCommerce integration
- * Version: 1.2.9
+ * Version: 1.4.1
  * Author: Difusal
  * License: GPL v2 or later
  * Requires at least: 5.0
@@ -16,7 +16,7 @@ if (!defined('ABSPATH')) {
     exit;
 }
 
-define('WAXING_APPOINTMENTS_VERSION', '1.2.8');
+define('WAXING_APPOINTMENTS_VERSION', '1.3.0');
 define('WAXING_APPOINTMENTS_PLUGIN_DIR', plugin_dir_path(__FILE__));
 define('WAXING_APPOINTMENTS_PLUGIN_URL', plugin_dir_url(__FILE__));
 
@@ -248,6 +248,15 @@ class WaxingAppointments {
     public function add_appointment_modal() {
         $services = $this->get_waxing_services();
         ?>
+        <!-- Loading Modal -->
+        <div id="waxing-loading-modal" class="modal loading-modal">
+            <div class="loading-content">
+                <div class="loading-spinner"></div>
+                <p class="loading-text">Processing your request...</p>
+            </div>
+        </div>
+        
+        <!-- Main Appointment Modal -->
         <div id="waxing-appointment-modal" class="modal">
             <div class="modal-content">
                 <span class="close">&times;</span>
@@ -1345,16 +1354,6 @@ class WaxingAppointments {
                 <div id="time-slots-container" style="display: none; margin-top: 20px;">
                     <div class="time-slot-selector" id="time-slots"></div>
                 </div>
-                
-                <div style="margin-top: 20px; padding: 15px; background: #fff3cd; border: 1px solid #ffeaa7; border-radius: 6px;">
-                    <h4 style="margin: 0 0 10px 0;">🔧 Debug & Troubleshooting</h4>
-                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px;">
-                        <button onclick="debugSession()" style="padding: 8px 15px; background: #6c757d; color: white; border: none; border-radius: 6px; cursor: pointer;">Check Session Status</button>
-                        <button onclick="testBlockFunction()" style="padding: 8px 15px; background: #17a2b8; color: white; border: none; border-radius: 6px; cursor: pointer;">Test Block Function</button>
-                        <button onclick="fixMissingTimeSlots()" style="padding: 8px 15px; background: #28a745; color: white; border: none; border-radius: 6px; cursor: pointer;">Fix Missing 1PM Slots</button>
-                    </div>
-                    <p style="margin: 10px 0 0 0; font-size: 12px; color: #6c757d;">Use "Fix Missing 1PM Slots" if you can't block 1PM hours</p>
-                </div>
             </div>
             
             <script>
@@ -1369,7 +1368,7 @@ class WaxingAppointments {
                     },
                     height: 'auto',
                     events: <?php echo json_encode($calendar_events); ?>,
-                    
+                    navLinks: true,
                     // Enable date/time selection
                     selectable: true,
                     selectMirror: true,
@@ -1428,18 +1427,7 @@ class WaxingAppointments {
                     
                     dateClick: function(info) {
                         if (info.view.type === 'dayGridMonth') {
-                            // In month view, switch to week view for that date
-                            calendar.changeView('timeGridWeek', info.dateStr);
-                        } else {
-                            // In time grid views, show time selection
-                            var date = info.dateStr.split('T')[0]; // Get just the date part
-                            var time = prompt('⏰ Enter time to block/unblock (format: HH:MM):');
-                            
-                            if (time && time.match(/^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/)) {
-                                checkAndToggleTimeSlot(date, time + ':00');
-                            } else if (time) {
-                                alert('❌ Invalid time format. Please use HH:MM (e.g., 09:00, 14:30)');
-                            }
+                        calendar.changeView('timeGridWeek', info.dateStr);
                         }
                     },
                     
