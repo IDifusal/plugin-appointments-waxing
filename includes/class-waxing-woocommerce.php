@@ -104,8 +104,26 @@ class Waxing_WooCommerce {
     public static function modify_cart_item_name($product_name, $cart_item, $cart_item_key) {
         if (isset($cart_item['appointment_service_id'])) {
             $service_name = ucwords(str_replace('_', ' ', $cart_item['appointment_service_id']));
-            $date = date('M j, Y', strtotime($cart_item['appointment_date']));
-            $time = date('g:i A', strtotime($cart_item['appointment_time']));
+            
+            // Format date without timezone conversion
+            $date_obj = DateTime::createFromFormat('Y-m-d', $cart_item['appointment_date'], new DateTimeZone('UTC'));
+            if ($date_obj) {
+                $date = $date_obj->format('M j, Y');
+            } else {
+                $date = date('M j, Y', strtotime($cart_item['appointment_date']));
+            }
+            
+            // Format time without timezone conversion
+            $time_str = $cart_item['appointment_time'];
+            if (strlen($time_str) === 5) {
+                $time_str = $time_str . ':00';
+            }
+            $time_parts = explode(':', $time_str);
+            $hours = intval($time_parts[0]);
+            $minutes = intval($time_parts[1]);
+            $am_pm = $hours >= 12 ? 'PM' : 'AM';
+            $display_hours = $hours > 12 ? $hours - 12 : ($hours == 0 ? 12 : $hours);
+            $time = sprintf('%d:%02d %s', $display_hours, $minutes, $am_pm);
 
             // Determine payment type label
             $payment_type = isset($cart_item['appointment_payment_type']) ? $cart_item['appointment_payment_type'] : 'deposit';
@@ -123,8 +141,26 @@ class Waxing_WooCommerce {
     public static function display_cart_item_data($item_data, $cart_item) {
         if (isset($cart_item['appointment_service_id'])) {
             $service_name = ucwords(str_replace('_', ' ', $cart_item['appointment_service_id']));
-            $date = date('M j, Y', strtotime($cart_item['appointment_date']));
-            $time = date('g:i A', strtotime($cart_item['appointment_time']));
+            
+            // Format date without timezone conversion
+            $date_obj = DateTime::createFromFormat('Y-m-d', $cart_item['appointment_date'], new DateTimeZone('UTC'));
+            if ($date_obj) {
+                $date = $date_obj->format('M j, Y');
+            } else {
+                $date = date('M j, Y', strtotime($cart_item['appointment_date']));
+            }
+            
+            // Format time without timezone conversion
+            $time_str = $cart_item['appointment_time'];
+            if (strlen($time_str) === 5) {
+                $time_str = $time_str . ':00';
+            }
+            $time_parts = explode(':', $time_str);
+            $hours = intval($time_parts[0]);
+            $minutes = intval($time_parts[1]);
+            $am_pm = $hours >= 12 ? 'PM' : 'AM';
+            $display_hours = $hours > 12 ? $hours - 12 : ($hours == 0 ? 12 : $hours);
+            $time = sprintf('%d:%02d %s', $display_hours, $minutes, $am_pm);
             
             $item_data[] = array(
                 'name'  => 'Service',
@@ -157,8 +193,27 @@ class Waxing_WooCommerce {
             $item->add_meta_data('Customer Phone', $values['appointment_customer_phone']);
 
             $service_name = ucwords(str_replace('_', ' ', $values['appointment_service_id']));
-            $date = date('M j, Y', strtotime($values['appointment_date']));
-            $time = date('g:i A', strtotime($values['appointment_time']));
+            
+            // Format date without timezone conversion - use DateTime with explicit timezone
+            $date_obj = DateTime::createFromFormat('Y-m-d', $values['appointment_date'], new DateTimeZone('UTC'));
+            if ($date_obj) {
+                $date = $date_obj->format('M j, Y');
+            } else {
+                // Fallback to original method if format doesn't match
+                $date = date('M j, Y', strtotime($values['appointment_date']));
+            }
+            
+            // Format time - handle both HH:MM and HH:MM:SS formats
+            $time_str = $values['appointment_time'];
+            if (strlen($time_str) === 5) {
+                $time_str = $time_str . ':00';
+            }
+            $time_parts = explode(':', $time_str);
+            $hours = intval($time_parts[0]);
+            $minutes = intval($time_parts[1]);
+            $am_pm = $hours >= 12 ? 'PM' : 'AM';
+            $display_hours = $hours > 12 ? $hours - 12 : ($hours == 0 ? 12 : $hours);
+            $time = sprintf('%d:%02d %s', $display_hours, $minutes, $am_pm);
 
             // Get payment type
             $payment_type = isset($values['appointment_payment_type']) ? $values['appointment_payment_type'] : 'deposit';
@@ -200,14 +255,21 @@ class Waxing_WooCommerce {
         $order = wc_get_order($order_id);
         
         if (!$order) {
+            error_log('WaxingAppointments: Order ' . $order_id . ' not found');
             return;
         }
         
+        error_log('WaxingAppointments: Processing order ' . $order_id . ' for appointment creation');
+        
         // Check if order has appointment items
+        $has_appointment = false;
         foreach ($order->get_items() as $item_id => $item) {
             $appointment_data = $item->get_meta('_appointment_data');
             
             if ($appointment_data && is_array($appointment_data)) {
+                $has_appointment = true;
+                error_log('WaxingAppointments: Found appointment data for order ' . $order_id . ' - Date: ' . $appointment_data['appointment_date'] . ' Time: ' . $appointment_data['appointment_time']);
+                
                 global $wpdb;
                 $appointments_table = Waxing_Database::get_table_name();
                 
@@ -229,14 +291,13 @@ class Waxing_WooCommerce {
                 ));
                 
                 if ($existing) {
-                    // Appointment already exists, skip
+                    error_log('WaxingAppointments: Appointment already exists (ID: ' . $existing . ') for order ' . $order_id);
                     continue;
                 }
                 
                 // Check if time slot is still available
                 if (!Waxing_Appointments_Handler::is_time_available($appointment_data['appointment_date'], $appointment_time)) {
-                    error_log('WaxingAppointments: Time slot no longer available for order ' . $order_id);
-                    // Send notification to admin or customer
+                    error_log('WaxingAppointments: Time slot no longer available for order ' . $order_id . ' - Date: ' . $appointment_data['appointment_date'] . ' Time: ' . $appointment_time);
                     continue;
                 }
                 
@@ -260,6 +321,8 @@ class Waxing_WooCommerce {
                 
                 if ($result) {
                     $appointment_id = $wpdb->insert_id;
+                    error_log('WaxingAppointments: Successfully created appointment ID ' . $appointment_id . ' for order ' . $order_id);
+                    
                     // Mark time as unavailable
                     Waxing_Appointments_Handler::mark_time_unavailable($appointment_data['appointment_date'], $appointment_time);
 
@@ -277,9 +340,13 @@ class Waxing_WooCommerce {
                         }
                     }
                 } else {
-                    error_log('WaxingAppointments: Failed to create appointment for order ' . $order_id);
+                    error_log('WaxingAppointments: Failed to create appointment for order ' . $order_id . ' - DB Error: ' . $wpdb->last_error);
                 }
             }
+        }
+        
+        if (!$has_appointment) {
+            error_log('WaxingAppointments: No appointment data found in order ' . $order_id);
         }
     }
 }

@@ -613,6 +613,205 @@ if (!defined('ABSPATH')) {
                         text-align: center;
                     }
                 }
+                
+                /* Toast notification styles */
+                .toast-container {
+                    position: fixed;
+                    top: 20px;
+                    right: 20px;
+                    z-index: 10000;
+                    display: flex;
+                    flex-direction: column;
+                    gap: 10px;
+                }
+                .toast {
+                    background: white;
+                    padding: 16px 20px;
+                    border-radius: 8px;
+                    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+                    border-left: 4px solid #0073aa;
+                    min-width: 300px;
+                    max-width: 400px;
+                    animation: slideInRight 0.3s ease-out;
+                    display: flex;
+                    align-items: center;
+                    gap: 12px;
+                }
+                .toast.success {
+                    border-left-color: #00a32a;
+                }
+                .toast.error {
+                    border-left-color: #d63638;
+                }
+                .toast-icon {
+                    font-size: 20px;
+                    flex-shrink: 0;
+                }
+                .toast-message {
+                    flex: 1;
+                    color: #1a202c;
+                    font-weight: 500;
+                }
+                @keyframes slideInRight {
+                    from {
+                        transform: translateX(100%);
+                        opacity: 0;
+                    }
+                    to {
+                        transform: translateX(0);
+                        opacity: 1;
+                    }
+                }
+                @keyframes slideOutRight {
+                    from {
+                        transform: translateX(0);
+                        opacity: 1;
+                    }
+                    to {
+                        transform: translateX(100%);
+                        opacity: 0;
+                    }
+                }
+                .toast.hiding {
+                    animation: slideOutRight 0.3s ease-in forwards;
+                }
+                
+                @media (max-width: 768px) {
+                    .toast-container {
+                        top: 10px;
+                        right: 10px;
+                        left: 10px;
+                    }
+                    .toast {
+                        min-width: auto;
+                        max-width: 100%;
+                    }
+                }
+                
+                /* Custom modal styles */
+                .custom-modal-overlay {
+                    position: fixed;
+                    top: 0;
+                    left: 0;
+                    width: 100%;
+                    height: 100%;
+                    background: rgba(0,0,0,0.5);
+                    z-index: 10001;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    animation: fadeIn 0.2s ease-out;
+                }
+                .custom-modal {
+                    background: white;
+                    border-radius: 12px;
+                    padding: 0;
+                    max-width: 500px;
+                    width: 90%;
+                    max-height: 90vh;
+                    overflow-y: auto;
+                    box-shadow: 0 8px 24px rgba(0,0,0,0.2);
+                    animation: slideUp 0.3s ease-out;
+                }
+                .custom-modal-header {
+                    padding: 20px 24px;
+                    border-bottom: 1px solid #e1e5e9;
+                    display: flex;
+                    justify-content: space-between;
+                    align-items: center;
+                }
+                .custom-modal-title {
+                    margin: 0;
+                    font-size: 20px;
+                    font-weight: 600;
+                    color: #1a202c;
+                }
+                .custom-modal-close {
+                    background: none;
+                    border: none;
+                    font-size: 24px;
+                    cursor: pointer;
+                    color: #718096;
+                    padding: 0;
+                    width: 32px;
+                    height: 32px;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    border-radius: 4px;
+                    transition: background 0.2s;
+                }
+                .custom-modal-close:hover {
+                    background: #f7fafc;
+                    color: #1a202c;
+                }
+                .custom-modal-body {
+                    padding: 24px;
+                    color: #4a5568;
+                    line-height: 1.6;
+                }
+                .custom-modal-footer {
+                    padding: 16px 24px;
+                    border-top: 1px solid #e1e5e9;
+                    display: flex;
+                    justify-content: flex-end;
+                    gap: 12px;
+                }
+                .custom-modal-btn {
+                    padding: 10px 20px;
+                    border: none;
+                    border-radius: 6px;
+                    font-size: 14px;
+                    font-weight: 500;
+                    cursor: pointer;
+                    transition: all 0.2s;
+                }
+                .custom-modal-btn-primary {
+                    background: #0073aa;
+                    color: white;
+                }
+                .custom-modal-btn-primary:hover {
+                    background: #005a87;
+                }
+                .custom-modal-btn-secondary {
+                    background: #e2e8f0;
+                    color: #4a5568;
+                }
+                .custom-modal-btn-secondary:hover {
+                    background: #cbd5e0;
+                }
+                @keyframes fadeIn {
+                    from { opacity: 0; }
+                    to { opacity: 1; }
+                }
+                @keyframes slideUp {
+                    from {
+                        transform: translateY(20px);
+                        opacity: 0;
+                    }
+                    to {
+                        transform: translateY(0);
+                        opacity: 1;
+                    }
+                }
+                
+                @media (max-width: 768px) {
+                    .custom-modal {
+                        width: 95%;
+                        margin: 20px;
+                    }
+                    .custom-modal-header,
+                    .custom-modal-body,
+                    .custom-modal-footer {
+                        padding: 16px;
+                    }
+                    .custom-modal-footer {
+                        flex-direction: column-reverse;
+                    }
+                    .custom-modal-btn {
+                        width: 100%;
+                    }
+                }
             </style>
         </head>
         <body>
@@ -764,6 +963,90 @@ if (!defined('ABSPATH')) {
             </div>
             
             <script>
+            // Toast notification functions
+            function showToast(message, type) {
+                type = type || 'success';
+                var container = document.getElementById('toast-container');
+                if (!container) {
+                    container = document.createElement('div');
+                    container.id = 'toast-container';
+                    container.className = 'toast-container';
+                    document.body.appendChild(container);
+                }
+                
+                var toast = document.createElement('div');
+                toast.className = 'toast ' + type;
+                var icon = type === 'success' ? '✓' : '✕';
+                toast.innerHTML = '<span class="toast-icon">' + icon + '</span><span class="toast-message">' + message + '</span>';
+                
+                container.appendChild(toast);
+                
+                setTimeout(function() {
+                    toast.classList.add('hiding');
+                    setTimeout(function() {
+                        if (toast.parentNode) {
+                            toast.parentNode.removeChild(toast);
+                        }
+                    }, 300);
+                }, 3000);
+            }
+            
+            // Custom modal function
+            function showCustomModal(title, message, onConfirm, onCancel) {
+                // Prevent duplicate modals
+                var existingOverlay = document.querySelector('.custom-modal-overlay');
+                if (existingOverlay) {
+                    existingOverlay.remove();
+                }
+                
+                var overlay = document.createElement('div');
+                overlay.className = 'custom-modal-overlay';
+                
+                var modal = document.createElement('div');
+                modal.className = 'custom-modal';
+                
+                modal.innerHTML = '<div class="custom-modal-header">' +
+                    '<h3 class="custom-modal-title">' + title + '</h3>' +
+                    '<button class="custom-modal-close" onclick="this.closest(\'.custom-modal-overlay\').remove()">×</button>' +
+                    '</div>' +
+                    '<div class="custom-modal-body">' + message + '</div>' +
+                    '<div class="custom-modal-footer">' +
+                    '<button class="custom-modal-btn custom-modal-btn-secondary" data-action="cancel">Cancel</button>' +
+                    '<button class="custom-modal-btn custom-modal-btn-primary" data-action="confirm">OK</button>' +
+                    '</div>';
+                
+                overlay.appendChild(modal);
+                document.body.appendChild(overlay);
+                
+                var closeModal = function() {
+                    overlay.remove();
+                };
+                
+                overlay.addEventListener('click', function(e) {
+                    if (e.target === overlay) {
+                        closeModal();
+                        if (onCancel) onCancel();
+                    }
+                });
+                
+                modal.querySelector('[data-action="cancel"]').addEventListener('click', function() {
+                    if (onCancel) onCancel();
+                    closeModal();
+                });
+                
+                modal.querySelector('[data-action="confirm"]').addEventListener('click', function() {
+                    if (onConfirm) {
+                        onConfirm();
+                    }
+                    closeModal();
+                });
+                
+                modal.querySelector('.custom-modal-close').addEventListener('click', function() {
+                    closeModal();
+                    if (onCancel) onCancel();
+                });
+            }
+            
             // Tab switching functionality
             document.addEventListener('DOMContentLoaded', function() {
                 // Tab switching
@@ -929,8 +1212,36 @@ if (!defined('ABSPATH')) {
                 document.body.removeChild(textArea);
             }
             
-            // Days that are fully blocked
+            // Days that are fully blocked (will be updated via AJAX)
             var fullyBlockedDays = <?php echo json_encode($fully_blocked_days); ?>;
+            
+            // Function to fetch calendar events via AJAX
+            function fetchCalendarEvents(fetchInfo, successCallback, failureCallback) {
+                jQuery.ajax({
+                    url: '<?php echo admin_url('admin-ajax.php'); ?>',
+                    type: 'POST',
+                    data: {
+                        action: 'get_calendar_events'
+                    },
+                    success: function(response) {
+                        if (response.success) {
+                            fullyBlockedDays = response.data.fully_blocked_days || [];
+                            if (successCallback) {
+                                successCallback(response.data.events || []);
+                            }
+                        } else {
+                            if (failureCallback) {
+                                failureCallback();
+                            }
+                        }
+                    },
+                    error: function() {
+                        if (failureCallback) {
+                            failureCallback();
+                        }
+                    }
+                });
+            }
             
             document.addEventListener('DOMContentLoaded', function() {
                 var calendarEl = document.getElementById('calendar');
@@ -947,13 +1258,14 @@ if (!defined('ABSPATH')) {
                         right: isMobile ? 'dayGridMonth,timeGridDay' : 'dayGridMonth,timeGridWeek,timeGridDay'
                     },
                     height: 'auto',
-                    events: <?php echo json_encode($calendar_events); ?>,
+                    events: fetchCalendarEvents,
                     navLinks: true,
                     // Enable date/time selection
                     selectable: true,
                     selectMirror: true,
                     selectOverlap: false, // Don't allow selection over existing events
                     unselectAuto: true,
+                    selectMinDistance: 5, // Require at least 5px drag to trigger selection
                     selectConstraint: {
                         daysOfWeek: [1, 2, 3, 4, 5, 6], // Monday to Saturday
                         startTime: '09:00',
@@ -965,24 +1277,12 @@ if (!defined('ABSPATH')) {
                         var startDate = selectionInfo.start;
                         var endDate = selectionInfo.end;
                         
-                        // Calculate how many time slots are selected
-                        var duration = (endDate - startDate) / (1000 * 60 * 60); // duration in hours
-                        var slotsCount = Math.ceil(duration);
-                        
-                        var action = confirm(
-                            'You have selected ' + slotsCount + ' hour(s) from:\n' +
-                            startDate.toLocaleString() + ' to ' + endDate.toLocaleString() + '\n\n' +
-                            'What would you like to do?\n\n' +
-                            'OK = Block these time slots\n' +
-                            'Cancel = Clear selection'
-                        );
-                        
-                        if (action) {
-                            blockTimeRange(startDate, endDate);
+                        // Only show prompt if it's actually a range (more than 1 slot)
+                        var duration = (endDate - startDate) / (1000 * 60 * 60);
+                        if (duration >= 1) {
+                            promptBlockTimeRange(startDate, endDate);
                         }
-                        
-                        // Clear the selection
-                        calendar.unselect();
+                        // For single slot clicks, dateClick will handle it
                     },
                     
                     eventClick: function(info) {
@@ -990,26 +1290,72 @@ if (!defined('ABSPATH')) {
                         var extendedProps = event.extendedProps;
                         
                         if (extendedProps.type === 'appointment') {
-                            alert('📅 Appointment Details:\n\n' +
-                                '👤 Customer: ' + extendedProps.customer_name + '\n' +
-                                '📧 Email: ' + extendedProps.customer_email + '\n' +
-                                '📞 Phone: ' + extendedProps.customer_phone + '\n' +
-                                '💄 Service: ' + extendedProps.service + '\n' +
-                                '📊 Status: ' + extendedProps.status + '\n' +
-                                '💰 Total: $' + extendedProps.total_price + '\n' +
-                                '💳 Deposit: $' + extendedProps.deposit_paid);
+                            var message = '<div style="line-height: 1.8;">' +
+                                '<strong>👤 Customer:</strong> ' + extendedProps.customer_name + '<br>' +
+                                '<strong>📧 Email:</strong> ' + extendedProps.customer_email + '<br>' +
+                                '<strong>📞 Phone:</strong> ' + extendedProps.customer_phone + '<br>' +
+                                '<strong>💄 Service:</strong> ' + extendedProps.service + '<br>' +
+                                '<strong>📊 Status:</strong> ' + extendedProps.status + '<br>' +
+                                '<strong>💰 Total:</strong> $' + extendedProps.total_price + '<br>' +
+                                '<strong>💳 Deposit:</strong> $' + extendedProps.deposit_paid +
+                                '</div>';
+                            
+                            showCustomModal('📅 Appointment Details', message, null, null);
                         } else if (extendedProps.type === 'blocked') {
-                            if (confirm('🚫 This time slot is currently BLOCKED.\n\nDo you want to UNBLOCK it?')) {
-                                unblockTimeSlot(extendedProps.date, extendedProps.time);
+                            var blockedMessage = 'This time slot is currently BLOCKED.';
+                            if (extendedProps.blocked_for) {
+                                blockedMessage += '<br><br><strong>Blocked for:</strong> ' + extendedProps.blocked_for;
                             }
+                            blockedMessage += '<br><br>Do you want to UNBLOCK it?';
+                            
+                            showCustomModal(
+                                '🚫 Unblock Time Slot',
+                                blockedMessage,
+                                function() {
+                                    unblockTimeSlot(extendedProps.date, extendedProps.time);
+                                },
+                                null
+                            );
                         }
                     },
                     
                     dateClick: function(info) {
+                        // Prevent event propagation to avoid conflicts
+                        info.jsEvent.stopPropagation();
+                        
                         if (info.view.type === 'dayGridMonth') {
-                        calendar.changeView('timeGridWeek', info.dateStr);
+                            calendar.changeView('timeGridWeek', info.dateStr);
+                        } else if (info.view.type === 'timeGridWeek' || info.view.type === 'timeGridDay') {
+                            // Only allow clicking empty slots (not on events)
+                            // Check if there's an event at this time
+                            var clickedEvents = calendar.getEvents().filter(function(event) {
+                                var eventStart = event.start;
+                                var clickDate = info.date;
+                                return eventStart.getFullYear() === clickDate.getFullYear() &&
+                                       eventStart.getMonth() === clickDate.getMonth() &&
+                                       eventStart.getDate() === clickDate.getDate() &&
+                                       eventStart.getHours() === clickDate.getHours();
+                            });
+                            
+                            // Only show prompt if no event exists at this time
+                            if (clickedEvents.length === 0) {
+                                // Extract date in YYYY-MM-DD format
+                                var clickDate = info.date;
+                                var year = clickDate.getFullYear();
+                                var month = String(clickDate.getMonth() + 1).padStart(2, '0');
+                                var day = String(clickDate.getDate()).padStart(2, '0');
+                                var dateStr = year + '-' + month + '-' + day;
+                                
+                                // Extract time in HH:MM format
+                                var hours = String(clickDate.getHours()).padStart(2, '0');
+                                var minutes = String(clickDate.getMinutes()).padStart(2, '0');
+                                var timeStr = hours + ':' + minutes;
+                                
+                                promptBlockTimeSlot(dateStr, timeStr);
+                            }
                         }
                     },
+                    
                     
                     dayCellContent: function(info) {
                         // Only show button in month view
@@ -1095,7 +1441,8 @@ if (!defined('ABSPATH')) {
                 window.waxingCalendar = calendar;
             });
             
-            function showBlockLoader(show = true) {
+            function showBlockLoader(show, message) {
+                message = message || 'Processing...';
                 let loader = document.getElementById('block-loader-overlay');
                 if (!loader) {
                     loader = document.createElement('div');
@@ -1110,20 +1457,20 @@ if (!defined('ABSPATH')) {
                     loader.style.display = 'flex';
                     loader.style.alignItems = 'center';
                     loader.style.justifyContent = 'center';
-                    loader.innerHTML = '<div style="padding:30px;background:#fff;border-radius:8px;box-shadow:0 2px 8px #ccc;"><span class="loader-spinner" style="display:inline-block;width:32px;height:32px;border:4px solid #ccc;border-top:4px solid #333;border-radius:50%;animation:spin 1s linear infinite;"></span> <span style="margin-left:12px;vertical-align:middle;">Procesando bloqueo...</span></div>';
                     document.body.appendChild(loader);
                     // Spinner animation
                     const style = document.createElement('style');
                     style.innerHTML = '@keyframes spin{0%{transform:rotate(0deg);}100%{transform:rotate(360deg);}}';
                     document.head.appendChild(style);
                 }
+                loader.innerHTML = '<div style="padding:30px;background:#fff;border-radius:8px;box-shadow:0 2px 8px #ccc;"><span class="loader-spinner" style="display:inline-block;width:32px;height:32px;border:4px solid #ccc;border-top:4px solid #333;border-radius:50%;animation:spin 1s linear infinite;"></span> <span style="margin-left:12px;vertical-align:middle;">' + message + '</span></div>';
                 loader.style.display = show ? 'flex' : 'none';
             }
 
                 function getSlotsBetween(startDate, endDate) {
-                    // Accept Date objects or ISO date strings. Use local date components to avoid timezone shifts.
-                    var start = (typeof startDate === 'string') ? new Date(startDate) : new Date(startDate);
-                    var end = (typeof endDate === 'string') ? new Date(endDate) : new Date(endDate);
+                    // Accept Date objects. Use local date components to avoid timezone shifts.
+                    var start = new Date(startDate);
+                    var end = new Date(endDate);
                     var slots = [];
                     start.setMinutes(0,0,0,0);
                     var cur = new Date(start);
@@ -1161,166 +1508,397 @@ if (!defined('ABSPATH')) {
                 }
             }
 
-            function blockTimeSlot(date, time) {
-                // Normalize time format to HH:MM:SS
-                if (time.length === 5) {
-                    time = time + ':00';
+            // Track ongoing AJAX requests to prevent duplicates
+            var ongoingBlockRequests = {};
+            
+            // Helper function to normalize date to YYYY-MM-DD format
+            function normalizeDate(dateInput) {
+                if (typeof dateInput === 'string') {
+                    // If it's a datetime string, extract just the date part
+                    if (dateInput.indexOf('T') !== -1) {
+                        return dateInput.split('T')[0];
+                    }
+                    // If it has timezone info, remove it
+                    if (dateInput.length > 10 && dateInput.indexOf('-') !== -1) {
+                        return dateInput.substring(0, 10);
+                    }
+                    return dateInput;
+                } else if (dateInput instanceof Date) {
+                    // If it's a Date object, format it
+                    var year = dateInput.getFullYear();
+                    var month = String(dateInput.getMonth() + 1).padStart(2, '0');
+                    var day = String(dateInput.getDate()).padStart(2, '0');
+                    return year + '-' + month + '-' + day;
+                }
+                return dateInput;
+            }
+            
+            // Helper function to normalize time to HH:MM:SS format
+            function normalizeTime(timeInput) {
+                if (typeof timeInput === 'string') {
+                    // Remove timezone info if present
+                    if (timeInput.indexOf('-') !== -1 || timeInput.indexOf('+') !== -1) {
+                        timeInput = timeInput.split(/[+-]/)[0];
+                    }
+                    // Add seconds if missing
+                    if (timeInput.length === 5) {
+                        return timeInput + ':00';
+                    }
+                    return timeInput;
+                }
+                return timeInput;
+            }
+            
+            function blockTimeSlot(date, time, blockedFor) {
+                blockedFor = blockedFor || '';
+                
+                // Normalize date and time formats
+                date = normalizeDate(date);
+                time = normalizeTime(time);
+                
+                // Create unique key for this slot
+                var requestKey = date + '_' + time;
+                
+                // Prevent duplicate requests for the same slot
+                if (ongoingBlockRequests[requestKey]) {
+                    return;
                 }
                 
-                showBlockLoader(true);
+                ongoingBlockRequests[requestKey] = true;
+                showBlockLoader(true, 'Blocking...');
+                
+                var ajaxData = {
+                    action: 'block_calendar_time',
+                    date: date,
+                    time: time
+                };
+                
+                if (blockedFor) {
+                    ajaxData.blocked_for = blockedFor;
+                }
+                
                 $.ajax({
                     url: '<?php echo admin_url('admin-ajax.php'); ?>',
                     type: 'POST',
-                    data: {
-                        action: 'block_calendar_time',
-                        date: date,
-                        time: time,
-                        nonce: '<?php echo wp_create_nonce('waxing_appointments_nonce'); ?>'
-                    },
+                    data: ajaxData,
                     success: function(response) {
-                        showBlockLoader(false);
+                        delete ongoingBlockRequests[requestKey];
                         if (response.success) {
-                            // Reload calendar events to show the blocked slot
+                            // Wait for calendar to update before showing toast
                             if (window.waxingCalendar) {
-                                try {
-                                    var refetchPromise = window.waxingCalendar.refetchEvents();
-                                    if (refetchPromise && typeof refetchPromise.then === 'function') {
-                                        refetchPromise.then(function() {
-                                            window.waxingCalendar.render();
-                                        }).catch(function() {
-                                            window.waxingCalendar.render();
-                                        });
-                                    } else {
-                                        setTimeout(function() {
-                                            window.waxingCalendar.render();
-                                        }, 300);
-                                    }
-                                } catch (e) {
-                                    console.error('Error refetching events:', e);
-                                    window.waxingCalendar.render();
+                                var refetchResult = window.waxingCalendar.refetchEvents();
+                                if (refetchResult && typeof refetchResult.then === 'function') {
+                                    // refetchEvents returns a promise
+                                    refetchResult.then(function() {
+                                        showBlockLoader(false);
+                                        showToast(response.data || 'Time slot blocked successfully', 'success');
+                                    }).catch(function() {
+                                        showBlockLoader(false);
+                                        showToast(response.data || 'Time slot blocked successfully', 'success');
+                                    });
+                                } else {
+                                    // refetchEvents doesn't return a promise, wait a bit for render
+                                    setTimeout(function() {
+                                        showBlockLoader(false);
+                                        showToast(response.data || 'Time slot blocked successfully', 'success');
+                                    }, 300);
                                 }
+                            } else {
+                                showBlockLoader(false);
+                                showToast(response.data || 'Time slot blocked successfully', 'success');
                             }
                         } else {
-                            alert('Error: ' + response.data);
+                            showBlockLoader(false);
+                            showToast('Error: ' + response.data, 'error');
                         }
                     },
                     error: function() {
+                        delete ongoingBlockRequests[requestKey];
                         showBlockLoader(false);
-                        alert('Network error. Please try again.');
+                        showToast('Network error. Please try again.', 'error');
                     }
                 });
             }
             
-            function blockTimeRange(startDate, endDate) {
-                showBlockLoader(true);
+            function promptBlockTimeSlot(date, time) {
+                // Prevent duplicate prompts
+                if (document.querySelector('.custom-modal-overlay')) {
+                    return;
+                }
+                
+                var timeFormatted = time.length === 5 ? time : time.substring(0, 5);
+                var message = '<div style="margin-bottom: 15px;">Block time slot <strong>' + timeFormatted + '</strong> on <strong>' + date + '</strong>?</div>' +
+                    '<div style="margin-top: 15px;">' +
+                    '<label for="blocked-for-input" style="display: block; margin-bottom: 8px; font-weight: 500; color: #4a5568;">Blocked for (optional):</label>' +
+                    '<input type="text" id="blocked-for-input" placeholder="e.g., John Doe, Maintenance, etc." ' +
+                    'style="width: 100%; padding: 10px; border: 1px solid #e2e8f0; border-radius: 6px; font-size: 14px; box-sizing: border-box;" />' +
+                    '<div style="margin-top: 8px; font-size: 12px; color: #718096;">Leave empty to block without a name</div>' +
+                    '</div>';
+                
+                showCustomModal(
+                    'Block Time Slot',
+                    message,
+                    function() {
+                        var input = document.getElementById('blocked-for-input');
+                        var blockedFor = input ? input.value.trim() : '';
+                        blockTimeSlot(date, time, blockedFor);
+                    },
+                    null
+                );
+                
+                // Focus the input field
+                setTimeout(function() {
+                    var input = document.getElementById('blocked-for-input');
+                    if (input) {
+                        input.focus();
+                        input.addEventListener('keypress', function(e) {
+                            if (e.key === 'Enter') {
+                                var blockedFor = input.value.trim();
+                                blockTimeSlot(date, time, blockedFor);
+                                var overlay = document.querySelector('.custom-modal-overlay');
+                                if (overlay) {
+                                    overlay.remove();
+                                }
+                            }
+                        });
+                    }
+                }, 100);
+            }
+            
+            function blockTimeRange(startDate, endDate, blockedFor) {
+                blockedFor = blockedFor || '';
+                
+                // Create unique key for this range
+                var rangeKey = startDate.getTime() + '_' + endDate.getTime();
+                
+                // Prevent duplicate requests for the same range
+                if (ongoingBlockRequests[rangeKey]) {
+                    return;
+                }
+                
+                ongoingBlockRequests[rangeKey] = true;
+                showBlockLoader(true, 'Blocking...');
                 var slots = getSlotsBetween(startDate, endDate); // returns [{date: 'YYYY-MM-DD', time: 'HH:MM:SS'}, ...]
                 var pending = slots.length;
                 var anyErrors = false;
+                var successCount = 0;
 
                 if (pending === 0) {
+                    delete ongoingBlockRequests[rangeKey];
                     showBlockLoader(false);
                     return;
                 }
 
                 slots.forEach(function(slot) {
+                    var slotKey = slot.date + '_' + slot.time;
+                    
+                    // Skip if this slot is already being processed
+                    if (ongoingBlockRequests[slotKey]) {
+                        pending--;
+                        if (pending <= 0) {
+                            delete ongoingBlockRequests[rangeKey];
+                            showBlockLoader(false);
+                            if (window.waxingCalendar) {
+                                window.waxingCalendar.refetchEvents();
+                            }
+                        }
+                        return;
+                    }
+                    
+                    ongoingBlockRequests[slotKey] = true;
+                    
+                    var ajaxData = {
+                        action: 'block_calendar_time',
+                        date: slot.date,
+                        time: slot.time
+                    };
+                    
+                    if (blockedFor) {
+                        ajaxData.blocked_for = blockedFor;
+                    }
+                    
                     $.ajax({
                         url: '<?php echo admin_url('admin-ajax.php'); ?>',
                         type: 'POST',
-                        data: {
-                            action: 'block_calendar_time',
-                            date: slot.date,
-                            time: slot.time,
-                            nonce: '<?php echo wp_create_nonce('waxing_appointments_nonce'); ?>'
-                        },
+                        data: ajaxData,
                         success: function(response) {
+                            delete ongoingBlockRequests[slotKey];
                             if (response.success) {
-                                addBlockedEventToCalendar(slot.date, slot.time);
+                                successCount++;
                             } else {
                                 anyErrors = true;
                                 console.warn('Failed to block slot', slot, response.data);
                             }
                         },
                         error: function() {
+                            delete ongoingBlockRequests[slotKey];
                             anyErrors = true;
                             console.error('Network error blocking slot', slot);
                         },
                         complete: function() {
                             pending--;
                             if (pending <= 0) {
-                                showBlockLoader(false);
+                                delete ongoingBlockRequests[rangeKey];
                                 
-                                // Reload calendar events after all slots are blocked
+                                // Wait for calendar to update before showing toast
                                 if (window.waxingCalendar) {
-                                    try {
-                                        var refetchPromise = window.waxingCalendar.refetchEvents();
-                                        if (refetchPromise && typeof refetchPromise.then === 'function') {
-                                            refetchPromise.then(function() {
-                                                window.waxingCalendar.render();
-                                            }).catch(function() {
-                                                window.waxingCalendar.render();
-                                            });
-                                        } else {
-                                            setTimeout(function() {
-                                                window.waxingCalendar.render();
-                                            }, 300);
-                                        }
-                                    } catch (e) {
-                                        console.error('Error refetching events:', e);
-                                        window.waxingCalendar.render();
+                                    var refetchResult = window.waxingCalendar.refetchEvents();
+                                    if (refetchResult && typeof refetchResult.then === 'function') {
+                                        // refetchEvents returns a promise
+                                        refetchResult.then(function() {
+                                            showBlockLoader(false);
+                                            if (anyErrors) {
+                                                showToast('Some time slots could not be blocked. Check console for details.', 'error');
+                                            } else {
+                                                var message = successCount + ' time slot(s) blocked successfully';
+                                                if (blockedFor) {
+                                                    message += ' for ' + blockedFor;
+                                                }
+                                                showToast(message, 'success');
+                                            }
+                                        }).catch(function() {
+                                            showBlockLoader(false);
+                                            if (anyErrors) {
+                                                showToast('Some time slots could not be blocked. Check console for details.', 'error');
+                                            } else {
+                                                var message = successCount + ' time slot(s) blocked successfully';
+                                                if (blockedFor) {
+                                                    message += ' for ' + blockedFor;
+                                                }
+                                                showToast(message, 'success');
+                                            }
+                                        });
+                                    } else {
+                                        // refetchEvents doesn't return a promise, wait a bit for render
+                                        setTimeout(function() {
+                                            showBlockLoader(false);
+                                            if (anyErrors) {
+                                                showToast('Some time slots could not be blocked. Check console for details.', 'error');
+                                            } else {
+                                                var message = successCount + ' time slot(s) blocked successfully';
+                                                if (blockedFor) {
+                                                    message += ' for ' + blockedFor;
+                                                }
+                                                showToast(message, 'success');
+                                            }
+                                        }, 300);
                                     }
-                                }
-                                
-                                if (anyErrors) {
-                                    alert('Algunos horarios no pudieron ser bloqueados. Revisa la consola para más detalles.');
+                                } else {
+                                    showBlockLoader(false);
+                                    if (anyErrors) {
+                                        showToast('Some time slots could not be blocked. Check console for details.', 'error');
+                                    } else {
+                                        var message = successCount + ' time slot(s) blocked successfully';
+                                        if (blockedFor) {
+                                            message += ' for ' + blockedFor;
+                                        }
+                                        showToast(message, 'success');
+                                    }
                                 }
                             }
                         }
                     });
                 });
             }
+            
+            function promptBlockTimeRange(startDate, endDate) {
+                // Prevent duplicate prompts
+                if (document.querySelector('.custom-modal-overlay')) {
+                    return;
+                }
+                
+                var duration = (endDate - startDate) / (1000 * 60 * 60);
+                var slotsCount = Math.ceil(duration);
+                var startFormatted = startDate.toLocaleString();
+                var endFormatted = endDate.toLocaleString();
+                
+                var message = '<div style="margin-bottom: 15px;">You have selected <strong>' + slotsCount + ' hour(s)</strong> from:<br>' +
+                    '<strong>' + startFormatted + '</strong> to <strong>' + endFormatted + '</strong></div>' +
+                    '<div style="margin-top: 15px;">' +
+                    '<label for="blocked-for-range-input" style="display: block; margin-bottom: 8px; font-weight: 500; color: #4a5568;">Blocked for (optional):</label>' +
+                    '<input type="text" id="blocked-for-range-input" placeholder="e.g., John Doe, Maintenance, etc." ' +
+                    'style="width: 100%; padding: 10px; border: 1px solid #e2e8f0; border-radius: 6px; font-size: 14px; box-sizing: border-box;" />' +
+                    '<div style="margin-top: 8px; font-size: 12px; color: #718096;">Leave empty to block without a name</div>' +
+                    '</div>';
+                
+                showCustomModal(
+                    'Block Time Slots',
+                    message,
+                    function() {
+                        var input = document.getElementById('blocked-for-range-input');
+                        var blockedFor = input ? input.value.trim() : '';
+                        blockTimeRange(startDate, endDate, blockedFor);
+                    },
+                    null
+                );
+                
+                // Focus the input field
+                setTimeout(function() {
+                    var input = document.getElementById('blocked-for-range-input');
+                    if (input) {
+                        input.focus();
+                        input.addEventListener('keypress', function(e) {
+                            if (e.key === 'Enter') {
+                                var blockedFor = input.value.trim();
+                                blockTimeRange(startDate, endDate, blockedFor);
+                                var overlay = document.querySelector('.custom-modal-overlay');
+                                if (overlay) {
+                                    overlay.remove();
+                                }
+                            }
+                        });
+                    }
+                }, 100);
+            }
 
             function unblockTimeSlot(date, time) {
-                showBlockLoader(true);
-                var normalized = (typeof time === 'string' && time.length === 5) ? time + ':00' : time;
+                showBlockLoader(true, 'Unblocking...');
+                
+                // Normalize date and time formats
+                date = normalizeDate(date);
+                var normalized = normalizeTime(time);
+                
                 $.ajax({
                     url: '<?php echo admin_url('admin-ajax.php'); ?>',
                     type: 'POST',
                     data: {
                         action: 'unblock_calendar_time',
                         date: date,
-                        time: normalized,
-                        nonce: '<?php echo wp_create_nonce('waxing_appointments_nonce'); ?>'
+                        time: normalized
                     },
                     success: function(response) {
-                        showBlockLoader(false);
                         if (response.success) {
-                            // Reload calendar events to remove the blocked slot
+                            // Wait for calendar to update before showing toast
                             if (window.waxingCalendar) {
-                                try {
-                                    var refetchPromise = window.waxingCalendar.refetchEvents();
-                                    if (refetchPromise && typeof refetchPromise.then === 'function') {
-                                        refetchPromise.then(function() {
-                                            window.waxingCalendar.render();
-                                        }).catch(function() {
-                                            window.waxingCalendar.render();
-                                        });
-                                    } else {
-                                        setTimeout(function() {
-                                            window.waxingCalendar.render();
-                                        }, 300);
-                                    }
-                                } catch (e) {
-                                    console.error('Error refetching events:', e);
-                                    window.waxingCalendar.render();
+                                var refetchResult = window.waxingCalendar.refetchEvents();
+                                if (refetchResult && typeof refetchResult.then === 'function') {
+                                    // refetchEvents returns a promise
+                                    refetchResult.then(function() {
+                                        showBlockLoader(false);
+                                        showToast('Time slot unblocked successfully', 'success');
+                                    }).catch(function() {
+                                        showBlockLoader(false);
+                                        showToast('Time slot unblocked successfully', 'success');
+                                    });
+                                } else {
+                                    // refetchEvents doesn't return a promise, wait a bit for render
+                                    setTimeout(function() {
+                                        showBlockLoader(false);
+                                        showToast('Time slot unblocked successfully', 'success');
+                                    }, 300);
                                 }
+                            } else {
+                                showBlockLoader(false);
+                                showToast('Time slot unblocked successfully', 'success');
                             }
                         } else {
-                            alert('Error: ' + response.data);
+                            showBlockLoader(false);
+                            showToast('Error: ' + response.data, 'error');
                         }
                     },
                     error: function() {
                         showBlockLoader(false);
-                        alert('Network error. Please try again.');
+                        showToast('Network error. Please try again.', 'error');
                     }
                 });
             }
@@ -1431,110 +2009,126 @@ if (!defined('ABSPATH')) {
             
             function toggleDayBlock(dateStr, buttonElement) {
                 var isBlocked = buttonElement.classList.contains('blocked');
-                var action = isBlocked ? 'unblock' : 'block';
-                var confirmMsg = isBlocked 
-                    ? '¿Desbloquear este día completo? Todos los horarios bloqueados estarán disponibles.'
-                    : '¿Bloquear este día completo? Todos los horarios disponibles serán bloqueados.';
                 
-                if (!confirm(confirmMsg)) {
-                    return;
-                }
-                
-                showBlockLoader(true);
-                
-                var ajaxAction = isBlocked ? 'unblock_calendar_day' : 'block_calendar_day';
-                
-                $.ajax({
-                    url: '<?php echo admin_url('admin-ajax.php'); ?>',
-                    type: 'POST',
-                    data: {
-                        action: ajaxAction,
-                        date: dateStr,
-                        nonce: '<?php echo wp_create_nonce('waxing_appointments_nonce'); ?>'
-                    },
-                    success: function(response) {
-                        showBlockLoader(false);
-                        if (response.success) {
-                            // Update fully blocked days array FIRST (before any rendering)
-                            if (isBlocked) {
-                                // Remove from fully blocked days array
-                                var index = fullyBlockedDays.indexOf(dateStr);
-                                if (index !== -1) {
-                                    fullyBlockedDays.splice(index, 1);
-                                }
-                            } else {
-                                // Add to fully blocked days array
-                                if (fullyBlockedDays.indexOf(dateStr) === -1) {
-                                    fullyBlockedDays.push(dateStr);
-                                }
-                            }
+                if (isBlocked) {
+                    // Unblock day - simple confirmation
+                    showCustomModal(
+                        'Unblock Day',
+                        'Unblock this entire day? All blocked time slots will be available.',
+                        function() {
+                            showBlockLoader(true, 'Unblocking...');
                             
-                            // Update button state immediately (optimistic update)
-                            updateDayBlockButtons(dateStr, !isBlocked);
-                            
-                            // Reload calendar events and update view
-                            if (window.waxingCalendar) {
-                                var currentView = window.waxingCalendar.view.type;
-                                var currentDate = window.waxingCalendar.view.currentStart;
-                                
-                                // Refetch events and wait for completion before re-rendering
-                                try {
-                                    var refetchPromise = window.waxingCalendar.refetchEvents();
-                                    
-                                    // Check if refetchEvents returns a promise
-                                    if (refetchPromise && typeof refetchPromise.then === 'function') {
-                                        // Force re-render after events are loaded
-                                        refetchPromise.then(function() {
-                                            // Small delay to ensure array is updated in memory
-                                            setTimeout(function() {
-                                                // Update all buttons with the same date across all views
-                                                updateDayBlockButtons(dateStr, !isBlocked);
-                                                
-                                                if (currentView === 'dayGridMonth' || currentView === 'timeGridWeek' || currentView === 'timeGridDay') {
-                                                    // Force re-render by navigating to same date
-                                                    window.waxingCalendar.gotoDate(currentDate);
-                                                    window.waxingCalendar.render();
-                                                } else {
-                                                    window.waxingCalendar.render();
-                                                }
-                                            }, 100);
-                                        }).catch(function() {
-                                            // If refetch fails, still try to render
-                                            updateDayBlockButtons(dateStr, !isBlocked);
-                                            window.waxingCalendar.render();
-                                        });
-                                    } else {
-                                        // If refetchEvents doesn't return a promise, just render after a delay
-                                        setTimeout(function() {
-                                            updateDayBlockButtons(dateStr, !isBlocked);
-                                            if (currentView === 'dayGridMonth' || currentView === 'timeGridWeek' || currentView === 'timeGridDay') {
-                                                window.waxingCalendar.gotoDate(currentDate);
-                                                window.waxingCalendar.render();
+                            $.ajax({
+                                url: '<?php echo admin_url('admin-ajax.php'); ?>',
+                                type: 'POST',
+                                data: {
+                                    action: 'unblock_calendar_day',
+                                    date: dateStr
+                                },
+                                success: function(response) {
+                                    if (response.success) {
+                                        // Wait for calendar to update before showing toast
+                                        if (window.waxingCalendar) {
+                                            var refetchResult = window.waxingCalendar.refetchEvents();
+                                            if (refetchResult && typeof refetchResult.then === 'function') {
+                                                // refetchEvents returns a promise
+                                                refetchResult.then(function() {
+                                                    updateDayBlockButtons(dateStr, false);
+                                                    showBlockLoader(false);
+                                                    showToast(response.data, 'success');
+                                                }).catch(function() {
+                                                    updateDayBlockButtons(dateStr, false);
+                                                    showBlockLoader(false);
+                                                    showToast(response.data, 'success');
+                                                });
                                             } else {
-                                                window.waxingCalendar.render();
+                                                // refetchEvents doesn't return a promise, wait a bit for render
+                                                setTimeout(function() {
+                                                    updateDayBlockButtons(dateStr, false);
+                                                    showBlockLoader(false);
+                                                    showToast(response.data, 'success');
+                                                }, 300);
                                             }
-                                        }, 300);
+                                        } else {
+                                            updateDayBlockButtons(dateStr, false);
+                                            showBlockLoader(false);
+                                            showToast(response.data, 'success');
+                                        }
+                                    } else {
+                                        showBlockLoader(false);
+                                        showToast('Error: ' + response.data, 'error');
                                     }
-                                } catch (e) {
-                                    // If refetchEvents throws an error, still try to render
-                                    console.error('Error refetching events:', e);
-                                    updateDayBlockButtons(dateStr, !isBlocked);
-                                    setTimeout(function() {
-                                        window.waxingCalendar.render();
-                                    }, 300);
+                                },
+                                error: function() {
+                                    showBlockLoader(false);
+                                    showToast('Network error. Please try again.', 'error');
                                 }
-                            }
+                            });
+                        },
+                        null
+                    );
+                } else {
+                    // Block day - simple confirmation without name input
+                    var message = '<div style="margin-bottom: 15px;">Block this entire day?<br><br>All available time slots will be blocked. Existing appointments and already blocked slots will be preserved.</div>';
+                    
+                    showCustomModal(
+                        'Block Day',
+                        message,
+                        function() {
+                            showBlockLoader(true, 'Blocking...');
                             
-                            alert(response.data);
-                        } else {
-                            alert('Error: ' + response.data);
-                        }
-                    },
-                    error: function() {
-                        showBlockLoader(false);
-                        alert('Error de red. Por favor intenta de nuevo.');
-                    }
-                });
+                            var ajaxData = {
+                                action: 'block_calendar_day',
+                                date: dateStr
+                            };
+                            
+                            $.ajax({
+                                url: '<?php echo admin_url('admin-ajax.php'); ?>',
+                                type: 'POST',
+                                data: ajaxData,
+                                success: function(response) {
+                                    if (response.success) {
+                                        // Wait for calendar to update before showing toast
+                                        if (window.waxingCalendar) {
+                                            var refetchResult = window.waxingCalendar.refetchEvents();
+                                            if (refetchResult && typeof refetchResult.then === 'function') {
+                                                // refetchEvents returns a promise
+                                                refetchResult.then(function() {
+                                                    updateDayBlockButtons(dateStr, true);
+                                                    showBlockLoader(false);
+                                                    showToast(response.data, 'success');
+                                                }).catch(function() {
+                                                    updateDayBlockButtons(dateStr, true);
+                                                    showBlockLoader(false);
+                                                    showToast(response.data, 'success');
+                                                });
+                                            } else {
+                                                // refetchEvents doesn't return a promise, wait a bit for render
+                                                setTimeout(function() {
+                                                    updateDayBlockButtons(dateStr, true);
+                                                    showBlockLoader(false);
+                                                    showToast(response.data, 'success');
+                                                }, 300);
+                                            }
+                                        } else {
+                                            updateDayBlockButtons(dateStr, true);
+                                            showBlockLoader(false);
+                                            showToast(response.data, 'success');
+                                        }
+                                    } else {
+                                        showBlockLoader(false);
+                                        showToast('Error: ' + response.data, 'error');
+                                    }
+                                },
+                                error: function() {
+                                    showBlockLoader(false);
+                                    showToast('Network error. Please try again.', 'error');
+                                }
+                            });
+                        },
+                        null
+                    );
+                }
             }
         </script>
         </body>

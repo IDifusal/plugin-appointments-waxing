@@ -3,7 +3,7 @@
  * Plugin Name: Waxing Appointments
  * Plugin URI: https://difusal.com
  * Description: Simple appointment booking system for waxing services with WooCommerce integration
- * Version: 2.5.1
+ * Version: 2.5.3
  * Author: Difusal
  * License: GPL v2 or later
  * Requires at least: 5.0
@@ -16,7 +16,7 @@ if (!defined('ABSPATH')) {
     exit;
 }
 
-define('WAXING_APPOINTMENTS_VERSION', '2.5.1');
+define('WAXING_APPOINTMENTS_VERSION', '2.5.3');
 define('WAXING_APPOINTMENTS_PLUGIN_DIR', plugin_dir_path(__FILE__));
 define('WAXING_APPOINTMENTS_PLUGIN_URL', plugin_dir_url(__FILE__));
 
@@ -70,6 +70,8 @@ class WaxingAppointments {
         add_action('wp_ajax_nopriv_block_calendar_day', array('Waxing_Calendar_Admin', 'handle_block_day'));
         add_action('wp_ajax_unblock_calendar_day', array('Waxing_Calendar_Admin', 'handle_unblock_day'));
         add_action('wp_ajax_nopriv_unblock_calendar_day', array('Waxing_Calendar_Admin', 'handle_unblock_day'));
+        add_action('wp_ajax_get_calendar_events', array('Waxing_Calendar_Admin', 'handle_get_calendar_events'));
+        add_action('wp_ajax_nopriv_get_calendar_events', array('Waxing_Calendar_Admin', 'handle_get_calendar_events'));
         add_action('wp_ajax_generate_stripe_payment_link', array('Waxing_Stripe', 'generate_payment_link'));
         add_action('wp_ajax_nopriv_generate_stripe_payment_link', array('Waxing_Stripe', 'generate_payment_link'));
         add_action('wp_ajax_get_payment_links_history', array('Waxing_Stripe', 'get_payment_links_history'));
@@ -84,6 +86,8 @@ class WaxingAppointments {
         add_action('woocommerce_checkout_create_order_line_item', array('Waxing_WooCommerce', 'save_appointment_to_order'), 10, 4);
         add_action('woocommerce_payment_complete', array('Waxing_WooCommerce', 'create_appointment_on_payment_complete'));
         add_action('woocommerce_order_status_completed', array('Waxing_WooCommerce', 'create_appointment_on_payment_complete'));
+        add_action('woocommerce_order_status_processing', array('Waxing_WooCommerce', 'create_appointment_on_payment_complete'));
+        add_action('woocommerce_thankyou', array('Waxing_WooCommerce', 'create_appointment_on_payment_complete'));
     }
     
     public function activate() {

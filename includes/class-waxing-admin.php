@@ -42,7 +42,25 @@ class Waxing_Admin {
         global $wpdb;
         $appointments_table = Waxing_Database::get_table_name();
         
-        $appointments = $wpdb->get_results("SELECT * FROM $appointments_table ORDER BY appointment_date DESC, appointment_time DESC");
+        // Handle manual appointment creation trigger
+        if (isset($_GET['create_appointment']) && isset($_GET['order_id']) && current_user_can('manage_options')) {
+            check_admin_referer('create_appointment_' . intval($_GET['order_id']));
+            $order_id = intval($_GET['order_id']);
+            Waxing_WooCommerce::create_appointment_on_payment_complete($order_id);
+            echo '<div class="notice notice-success"><p>Appointment creation triggered for order #' . $order_id . '. Check logs for details.</p></div>';
+        }
+        
+        // Get only confirmed appointments (exclude blocked slots)
+        $appointments = $wpdb->get_results(
+            "SELECT * FROM $appointments_table 
+            WHERE status IN ('confirmed', 'booked') 
+            ORDER BY appointment_date DESC, appointment_time DESC"
+        );
+        
+        // Handle case where query fails or returns null
+        if (!is_array($appointments)) {
+            $appointments = array();
+        }
         
         include WAXING_APPOINTMENTS_PLUGIN_DIR . 'includes/admin/views/admin-appointments-page.php';
     }
