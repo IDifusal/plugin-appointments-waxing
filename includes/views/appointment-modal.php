@@ -39,6 +39,19 @@ if (!defined('ABSPATH')) {
             </div>
             
             <div class="form-group">
+                <label for="office">Location *</label>
+                <select id="office" name="office" required>
+                    <option value="">Select a location...</option>
+                    <?php foreach ($offices as $office): ?>
+                    <option value="<?php echo esc_attr($office['value']); ?>" data-address="<?php echo esc_attr($office['address']); ?>">
+                        <?php echo esc_html($office['name']); ?>
+                    </option>
+                    <?php endforeach; ?>
+                </select>
+                <p id="office-address" class="office-address" style="display:none;"></p>
+            </div>
+
+            <div class="form-group">
                 <label for="service">Service *</label>
                 <select id="service" name="service" required>
                     <option value="">Select a service...</option>

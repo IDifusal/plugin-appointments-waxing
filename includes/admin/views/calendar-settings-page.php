@@ -35,9 +35,64 @@ if (!defined('ABSPATH')) {
 
         <?php submit_button('Update Credentials', 'primary', 'submit'); ?>
     </form>
-    
+
     <hr style="margin: 30px 0;">
-    
+
+    <h2>Calendar Admin Users</h2>
+    <p>Create additional users that can log in to the external calendar admin view at <strong><?php echo home_url('/calendar-admin'); ?></strong>. These accounts are independent of WordPress users.</p>
+
+    <?php if (!empty($calendar_users)): ?>
+        <table class="widefat striped" style="max-width: 500px; margin-bottom: 20px;">
+            <thead>
+                <tr>
+                    <th>Username</th>
+                    <th style="width: 100px;">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                <?php foreach ($calendar_users as $user_name => $user_hash): ?>
+                <tr>
+                    <td><?php echo esc_html($user_name); ?></td>
+                    <td>
+                        <form method="post" action="" onsubmit="return confirm('Delete user <?php echo esc_js($user_name); ?>?');" style="margin: 0;">
+                            <?php wp_nonce_field('waxing_calendar_users'); ?>
+                            <input type="hidden" name="delete_calendar_username" value="<?php echo esc_attr($user_name); ?>" />
+                            <button type="submit" name="submit_delete_calendar_user" value="1" class="button button-small button-link-delete">Delete</button>
+                        </form>
+                    </td>
+                </tr>
+                <?php endforeach; ?>
+            </tbody>
+        </table>
+    <?php else: ?>
+        <p><em>No additional users yet. Only the primary credentials above can log in.</em></p>
+    <?php endif; ?>
+
+    <form method="post" action="">
+        <?php wp_nonce_field('waxing_calendar_users'); ?>
+        <h3>Add New User</h3>
+        <table class="form-table">
+            <tr>
+                <th scope="row">Username</th>
+                <td>
+                    <input type="text" name="new_calendar_username" value="" class="regular-text" autocomplete="off" required />
+                    <p class="description">Username for the new calendar admin user</p>
+                </td>
+            </tr>
+            <tr>
+                <th scope="row">Password</th>
+                <td>
+                    <input type="password" name="new_calendar_password" value="" class="regular-text" autocomplete="new-password" required />
+                    <p class="description">Password is stored securely (hashed) and cannot be viewed later</p>
+                </td>
+            </tr>
+        </table>
+
+        <?php submit_button('Create User', 'secondary', 'submit_add_calendar_user'); ?>
+    </form>
+
+    <hr style="margin: 30px 0;">
+
     <form method="post" action="">
         <?php wp_nonce_field('waxing_stripe_settings'); ?>
         <h2>Stripe Payment Settings</h2>

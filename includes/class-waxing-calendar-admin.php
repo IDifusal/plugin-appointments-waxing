@@ -78,8 +78,18 @@ class Waxing_Calendar_Admin {
         // Get credentials from WordPress options (but authentication is still independent)
         $admin_username = get_option('waxing_calendar_admin_username', 'admin');
         $admin_password = get_option('waxing_calendar_admin_password', 'waxing2024');
-        
-        if ($username === $admin_username && $password === $admin_password) {
+
+        $authenticated = ($username === $admin_username && $password === $admin_password);
+
+        // Check additional calendar admin users (created in plugin settings, passwords stored hashed)
+        if (!$authenticated) {
+            $calendar_users = get_option('waxing_calendar_admin_users', array());
+            if (isset($calendar_users[$username]) && password_verify($password, $calendar_users[$username])) {
+                $authenticated = true;
+            }
+        }
+
+        if ($authenticated) {
             if (!session_id()) {
                 session_start();
             }
@@ -130,50 +140,55 @@ class Waxing_Calendar_Admin {
         
         global $wpdb;
         $appointments_table = Waxing_Database::get_table_name();
-        
-        // Check if the slot is already booked by a confirmed appointment
+
+        // A slot can optionally be blocked for a single office; default blocks every office.
+        $office = isset($_POST['office']) ? sanitize_text_field($_POST['office']) : '';
+        $offices = Waxing_Services::get_offices();
+        $target_offices = ($office !== '' && isset($offices[$office])) ? array($office) : array_keys($offices);
+
+        // Check if the slot is already booked by a confirmed appointment (in any target office)
         $is_booked = $wpdb->get_var($wpdb->prepare(
-            "SELECT COUNT(*) FROM $appointments_table WHERE appointment_date = %s AND appointment_time = %s AND status IN ('booked', 'confirmed')",
-            $date, $time
+            "SELECT COUNT(*) FROM $appointments_table WHERE appointment_date = %s AND appointment_time = %s AND office IN (" . implode(',', array_fill(0, count($target_offices), '%s')) . ") AND status IN ('booked', 'confirmed')",
+            array_merge(array($date, $time), $target_offices)
         ));
-        
+
         if ($is_booked) {
             wp_send_json_error('Cannot block a time slot that is already booked');
         }
-        
+
         // Get optional blocked_for (user name) parameter
         $blocked_for = isset($_POST['blocked_for']) ? sanitize_text_field($_POST['blocked_for']) : '';
         $blocked_for = trim($blocked_for);
-        
-        // First, delete any existing record with this date/time (to handle status changes)
-        $wpdb->delete(
-            $appointments_table,
-            array('appointment_date' => $date, 'appointment_time' => $time),
-            array('%s', '%s')
-        );
-        
-        // Prepare data array
-        $insert_data = array(
-            'appointment_date' => $date,
-            'appointment_time' => $time,
-            'status' => 'blocked'
-        );
-        $insert_format = array('%s', '%s', '%s');
-        
-        // Add customer_name if provided
-        if (!empty($blocked_for)) {
-            $insert_data['customer_name'] = $blocked_for;
-            $insert_format[] = '%s';
+
+        $blocked_count = 0;
+        foreach ($target_offices as $target_office) {
+            // Remove any existing record for this office/date/time (to handle status changes)
+            $wpdb->delete(
+                $appointments_table,
+                array('appointment_date' => $date, 'appointment_time' => $time, 'office' => $target_office),
+                array('%s', '%s', '%s')
+            );
+
+            $insert_data = array(
+                'appointment_date' => $date,
+                'appointment_time' => $time,
+                'office' => $target_office,
+                'status' => 'blocked'
+            );
+            $insert_format = array('%s', '%s', '%s', '%s');
+
+            if (!empty($blocked_for)) {
+                $insert_data['customer_name'] = $blocked_for;
+                $insert_format[] = '%s';
+            }
+
+            $result = $wpdb->insert($appointments_table, $insert_data, $insert_format);
+            if ($result !== false) {
+                $blocked_count++;
+            }
         }
-        
-        // Then insert the blocked slot
-        $result = $wpdb->insert(
-            $appointments_table,
-            $insert_data,
-            $insert_format
-        );
-        
-        if ($result !== false) {
+
+        if ($blocked_count > 0) {
             $message = 'Time slot blocked successfully';
             if (!empty($blocked_for)) {
                 $message .= ' for ' . esc_html($blocked_for);
@@ -213,14 +228,25 @@ class Waxing_Calendar_Admin {
         
         global $wpdb;
         $appointments_table = Waxing_Database::get_table_name();
-        
-        // Delete the blocked slot
-        $result = $wpdb->delete(
-            $appointments_table,
-            array('appointment_date' => $date, 'appointment_time' => $time, 'status' => 'blocked'),
-            array('%s', '%s', '%s')
-        );
-        
+
+        // Unblock a single office if provided, otherwise clear the block for every office.
+        $office = isset($_POST['office']) ? sanitize_text_field($_POST['office']) : '';
+        $offices = Waxing_Services::get_offices();
+
+        if ($office !== '' && isset($offices[$office])) {
+            $result = $wpdb->delete(
+                $appointments_table,
+                array('appointment_date' => $date, 'appointment_time' => $time, 'office' => $office, 'status' => 'blocked'),
+                array('%s', '%s', '%s', '%s')
+            );
+        } else {
+            $result = $wpdb->delete(
+                $appointments_table,
+                array('appointment_date' => $date, 'appointment_time' => $time, 'status' => 'blocked'),
+                array('%s', '%s', '%s')
+            );
+        }
+
         if ($result !== false) {
             wp_send_json_success('Time slot unblocked successfully');
         } else {
@@ -263,51 +289,59 @@ class Waxing_Calendar_Admin {
             wp_send_json_error('No time slots available for this date (day may be closed)');
         }
         
+        // Blocking a whole day closes every office for that date.
+        $office = isset($_POST['office']) ? sanitize_text_field($_POST['office']) : '';
+        $offices = Waxing_Services::get_offices();
+        $target_offices = ($office !== '' && isset($offices[$office])) ? array($office) : array_keys($offices);
+
         $blocked_count = 0;
         $skipped_appointments = 0;
         $skipped_already_blocked = 0;
-        
+
         foreach ($time_slots as $time) {
             // Normalize time format to HH:MM:SS
             if (strlen($time) === 5) {
                 $time = $time . ':00';
             }
-            
-            // Check if slot is already booked by an appointment
-            $is_booked = $wpdb->get_var($wpdb->prepare(
-                "SELECT COUNT(*) FROM $appointments_table WHERE appointment_date = %s AND appointment_time = %s AND status IN ('booked', 'confirmed')",
-                $date, $time
-            ));
-            
-            if ($is_booked) {
-                $skipped_appointments++;
-                continue;
-            }
-            
-            // Check if slot is already blocked (preserve existing blocked slots)
-            $is_already_blocked = $wpdb->get_var($wpdb->prepare(
-                "SELECT COUNT(*) FROM $appointments_table WHERE appointment_date = %s AND appointment_time = %s AND status = 'blocked'",
-                $date, $time
-            ));
-            
-            if ($is_already_blocked) {
-                $skipped_already_blocked++;
-                continue;
-            }
-            
-            // Insert the blocked slot (no customer_name for day blocking)
-            $result = $wpdb->insert(
-                $appointments_table,
-                array(
-                    'appointment_date' => $date,
-                    'appointment_time' => $time,
-                    'status' => 'blocked'
-                ),
-                array('%s', '%s', '%s')
-            );
-            
-            if ($result !== false) {
-                $blocked_count++;
+
+            foreach ($target_offices as $target_office) {
+                // Check if slot is already booked by an appointment (for this office)
+                $is_booked = $wpdb->get_var($wpdb->prepare(
+                    "SELECT COUNT(*) FROM $appointments_table WHERE appointment_date = %s AND appointment_time = %s AND office = %s AND status IN ('booked', 'confirmed')",
+                    $date, $time, $target_office
+                ));
+
+                if ($is_booked) {
+                    $skipped_appointments++;
+                    continue;
+                }
+
+                // Check if slot is already blocked (preserve existing blocked slots)
+                $is_already_blocked = $wpdb->get_var($wpdb->prepare(
+                    "SELECT COUNT(*) FROM $appointments_table WHERE appointment_date = %s AND appointment_time = %s AND office = %s AND status = 'blocked'",
+                    $date, $time, $target_office
+                ));
+
+                if ($is_already_blocked) {
+                    $skipped_already_blocked++;
+                    continue;
+                }
+
+                // Insert the blocked slot (no customer_name for day blocking)
+                $result = $wpdb->insert(
+                    $appointments_table,
+                    array(
+                        'appointment_date' => $date,
+                        'appointment_time' => $time,
+                        'office' => $target_office,
+                        'status' => 'blocked'
+                    ),
+                    array('%s', '%s', '%s', '%s')
+                );
+
+                if ($result !== false) {
+                    $blocked_count++;
+                }
             }
         }
         
@@ -372,6 +406,31 @@ class Waxing_Calendar_Admin {
     }
     
     /**
+     * Fixed color palette per office for the single calendar view.
+     */
+    public static function get_office_colors() {
+        return array(
+            'harrisburg'   => array('bg' => '#0073aa', 'border' => '#005a87'),
+            'indian_trail' => array('bg' => '#7b3fbf', 'border' => '#5c2e8f'),
+            '_default'     => array('bg' => '#0073aa', 'border' => '#005a87'),
+        );
+    }
+
+    /**
+     * Short label used to prefix event titles so offices are distinguishable at a glance.
+     */
+    public static function get_office_short_label($office_value) {
+        $labels = array(
+            'harrisburg'   => 'HBG',
+            'indian_trail' => 'IT',
+        );
+        if (isset($labels[$office_value])) {
+            return $labels[$office_value];
+        }
+        return strtoupper(substr((string) $office_value, 0, 3));
+    }
+
+    /**
      * Get calendar events and fully blocked days data
      * Returns array with 'events' and 'fully_blocked_days' keys
      */
@@ -405,21 +464,31 @@ class Waxing_Calendar_Admin {
         
         $calendar_events = array();
         
+        // Distinct colors per office so a single calendar visually separates locations.
+        $office_colors = self::get_office_colors();
+
         foreach ($appointments as $appointment) {
             $service_name = str_replace('_', ' ', ucwords($appointment->service_id));
+            $office = Waxing_Services::get_office($appointment->office);
+            $office_name = $office ? $office['name'] : ucwords(str_replace('_', ' ', (string) $appointment->office));
+            $office_short = self::get_office_short_label($appointment->office);
+            $colors = isset($office_colors[$appointment->office]) ? $office_colors[$appointment->office] : $office_colors['_default'];
+
             $calendar_events[] = array(
                 'id' => 'appointment_' . $appointment->id,
-                'title' => $appointment->customer_name . ' - ' . $service_name,
+                'title' => '[' . $office_short . '] ' . $appointment->customer_name . ' - ' . $service_name,
                 'start' => $appointment->appointment_date . 'T' . $appointment->appointment_time,
-                'end' => date('Y-m-d\TH:i:s', strtotime($appointment->appointment_date . ' ' . $appointment->appointment_time . ' +1 hour')),
-                'backgroundColor' => '#0073aa',
-                'borderColor' => '#005a87',
+                'end' => date('Y-m-d\TH:i:s', strtotime($appointment->appointment_date . ' ' . $appointment->appointment_time . ' +30 minutes')),
+                'backgroundColor' => $colors['bg'],
+                'borderColor' => $colors['border'],
                 'extendedProps' => array(
                     'type' => 'appointment',
                     'customer_name' => $appointment->customer_name,
                     'customer_email' => $appointment->customer_email,
                     'customer_phone' => $appointment->customer_phone,
                     'service' => $service_name,
+                    'office' => $appointment->office,
+                    'office_name' => $office_name,
                     'status' => $appointment->status,
                     'total_price' => $appointment->total_price,
                     'deposit_paid' => $appointment->deposit_paid
@@ -427,48 +496,99 @@ class Waxing_Calendar_Admin {
             );
         }
         
+        // A block can exist per office; collapse the same date+time into one calendar
+        // event and track which offices it covers so the single calendar stays readable.
+        $blocked_by_slot = array();
         foreach ($blocked_slots as $slot) {
-            $blocked_title = 'Blocked';
-            if (!empty($slot->customer_name)) {
-                $blocked_title = 'Blocked for ' . $slot->customer_name;
-            }
-            
-            $calendar_events[] = array(
-                'id' => 'blocked_' . $slot->appointment_date . '_' . str_replace(':', '', $slot->appointment_time),
-                'title' => $blocked_title,
-                'start' => $slot->appointment_date . 'T' . $slot->appointment_time,
-                'end' => date('Y-m-d\TH:i:s', strtotime($slot->appointment_date . ' ' . $slot->appointment_time . ' +1 hour')),
-                'backgroundColor' => '#d63638',
-                'borderColor' => '#a02622',
-                'extendedProps' => array(
-                    'type' => 'blocked',
+            $key = $slot->appointment_date . '_' . $slot->appointment_time;
+            if (!isset($blocked_by_slot[$key])) {
+                $blocked_by_slot[$key] = array(
                     'date' => $slot->appointment_date,
                     'time' => $slot->appointment_time,
-                    'blocked_for' => $slot->customer_name ? $slot->customer_name : ''
+                    'offices' => array(),
+                    'customer_name' => '',
+                );
+            }
+            $blocked_by_slot[$key]['offices'][] = $slot->office;
+            if (empty($blocked_by_slot[$key]['customer_name']) && !empty($slot->customer_name)) {
+                $blocked_by_slot[$key]['customer_name'] = $slot->customer_name;
+            }
+        }
+
+        $all_office_keys = array_keys(Waxing_Services::get_offices());
+
+        foreach ($blocked_by_slot as $slot) {
+            $covers_all = count(array_unique($slot['offices'])) >= count($all_office_keys);
+            $office_labels = array();
+            foreach (array_unique($slot['offices']) as $ov) {
+                $office_labels[] = self::get_office_short_label($ov);
+            }
+            $scope_suffix = $covers_all ? '' : ' (' . implode(', ', $office_labels) . ')';
+
+            $has_name = !empty($slot['customer_name']);
+            $title = $has_name ? $slot['customer_name'] : 'Blocked';
+            $title .= $scope_suffix;
+
+            $calendar_events[] = array(
+                'id' => 'blocked_' . $slot['date'] . '_' . str_replace(':', '', $slot['time']),
+                'title' => $title,
+                'start' => $slot['date'] . 'T' . $slot['time'],
+                'end' => date('Y-m-d\TH:i:s', strtotime($slot['date'] . ' ' . $slot['time'] . ' +30 minutes')),
+                'backgroundColor' => $has_name ? '#0073aa' : '#d63638',
+                'borderColor' => $has_name ? '#005a87' : '#a02622',
+                'extendedProps' => array(
+                    'type' => 'blocked',
+                    'date' => $slot['date'],
+                    'time' => $slot['time'],
+                    'offices' => array_values(array_unique($slot['offices'])),
+                    'covers_all_offices' => $covers_all,
+                    'blocked_for' => $slot['customer_name']
                 )
             );
         }
         
-        $fully_blocked_days = array();
-        $blocked_by_date = array();
+        // A day counts as fully blocked when every distinct time slot is unavailable
+        // (blocked or booked) across every office. We work per distinct time slot so
+        // the per-office fan-out of blocked rows doesn't distort the comparison.
+        $office_count = max(1, count($all_office_keys));
+        $unavailable_by_date = array(); // date => [ time => count of offices blocked/booked ]
+
         foreach ($blocked_slots as $slot) {
-            if (!isset($blocked_by_date[$slot->appointment_date])) {
-                $blocked_by_date[$slot->appointment_date] = 0;
-            }
-            $blocked_by_date[$slot->appointment_date]++;
+            $unavailable_by_date[$slot->appointment_date][$slot->appointment_time]['blocked'][$slot->office] = true;
         }
-        
-        foreach ($blocked_by_date as $date => $blocked_count) {
+
+        $fully_blocked_days = array();
+        foreach ($unavailable_by_date as $date => $times) {
             $day_of_week = date('w', strtotime($date));
             if ($day_of_week == 0) continue;
-            
-            $expected_slots = count(Waxing_Services::get_time_slots_for_date($date));
-            $booked_count = $wpdb->get_var($wpdb->prepare(
-                "SELECT COUNT(*) FROM $appointments_table WHERE appointment_date = %s AND status IN ('booked', 'confirmed')",
+
+            $expected_slots = Waxing_Services::get_time_slots_for_date($date);
+            if (empty($expected_slots)) continue;
+
+            // Pull booked/confirmed slots for this date so a booked slot still counts as "closed".
+            $booked_rows = $wpdb->get_results($wpdb->prepare(
+                "SELECT appointment_time, office FROM $appointments_table WHERE appointment_date = %s AND status IN ('booked', 'confirmed')",
                 $date
             ));
-            
-            if ($blocked_count >= ($expected_slots - $booked_count)) {
+            foreach ($booked_rows as $b) {
+                $unavailable_by_date[$date][$b->appointment_time]['blocked'][$b->office] = true;
+            }
+
+            $day_fully_blocked = true;
+            foreach ($expected_slots as $slot_time) {
+                if (strlen($slot_time) === 5) {
+                    $slot_time = $slot_time . ':00';
+                }
+                $covered = isset($unavailable_by_date[$date][$slot_time]['blocked'])
+                    ? count($unavailable_by_date[$date][$slot_time]['blocked'])
+                    : 0;
+                if ($covered < $office_count) {
+                    $day_fully_blocked = false;
+                    break;
+                }
+            }
+
+            if ($day_fully_blocked) {
                 $fully_blocked_days[] = $date;
             }
         }

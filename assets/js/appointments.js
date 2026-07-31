@@ -190,6 +190,7 @@ jQuery(document).ready(function($) {
             data: {
                 action: 'check_availability',
                 date: date,
+                office: $('#office').val(),
                 nonce: waxing_ajax.nonce
             },
             success: function(response) {
@@ -214,6 +215,23 @@ jQuery(document).ready(function($) {
         });
     }
     
+    $('#office').on('change', function() {
+        var selectedOption = $(this).find('option:selected');
+        var address = selectedOption.data('address');
+
+        if (address) {
+            $('#office-address').text(address).show();
+        } else {
+            $('#office-address').hide();
+        }
+
+        // Availability is per-office, so reload times for the currently selected date.
+        var isoDate = $('#appointment_date_value').val();
+        if (isoDate) {
+            loadTimesForDate(isoDate);
+        }
+    });
+
     $('#service').on('change', function() {
         var selectedOption = $(this).find('option:selected');
         var price = selectedOption.data('price');
@@ -260,6 +278,7 @@ jQuery(document).ready(function($) {
             customer_name: $('#customer_name').val(),
             customer_email: $('#customer_email').val(),
             customer_phone: $('#customer_phone').val(),
+            office: $('#office').val(),
             service: $('#service').val(),
             appointment_date: appointmentDate,
             appointment_time: $('#appointment_time').val(),
@@ -320,6 +339,11 @@ jQuery(document).ready(function($) {
             isValid = false;
         }
         
+        if (!data.office) {
+            showFieldError('#office', 'Please select a location');
+            isValid = false;
+        }
+
         if (!data.service) {
             showFieldError('#service', 'Please select a service');
             isValid = false;
@@ -435,8 +459,9 @@ jQuery(document).ready(function($) {
         var start = (typeof startDate === 'string') ? new Date(startDate) : new Date(startDate);
         var end = (typeof endDate === 'string') ? new Date(endDate) : new Date(endDate);
         var slots = [];
-        // normalize to top of the hour (local time)
-        start.setMinutes(0,0,0,0);
+        // normalize to nearest 30-minute boundary (local time)
+        var mins = start.getMinutes();
+        start.setMinutes(mins >= 30 ? 30 : 0, 0, 0);
         var cur = new Date(start);
         function pad(n){return n<10? '0'+n : ''+n}
         while (cur < end) {
@@ -444,7 +469,7 @@ jQuery(document).ready(function($) {
             var isoDate = cur.getFullYear() + '-' + pad(cur.getMonth()+1) + '-' + pad(cur.getDate());
             var hhmm = pad(cur.getHours()) + ':' + pad(cur.getMinutes());
             slots.push({ date: isoDate, time: hhmm + ':00' });
-            cur.setHours(cur.getHours() + 1, 0, 0, 0);
+            cur.setTime(cur.getTime() + 30 * 60 * 1000);
         }
         return slots;
     }

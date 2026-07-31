@@ -14,7 +14,7 @@ class Waxing_WooCommerce {
     /**
      * Create checkout session for appointment booking
      */
-    public static function create_checkout_session($product_id, $payment_amount, $customer_name, $customer_email, $customer_phone, $service_id, $appointment_date, $appointment_time, $total_price, $payment_type = 'deposit') {
+    public static function create_checkout_session($product_id, $payment_amount, $customer_name, $customer_email, $customer_phone, $service_id, $appointment_date, $appointment_time, $total_price, $payment_type = 'deposit', $office = 'harrisburg') {
         if (!class_exists('WooCommerce')) {
             throw new Exception('WooCommerce is not active');
         }
@@ -49,6 +49,7 @@ class Waxing_WooCommerce {
             'appointment_customer_email' => $customer_email,
             'appointment_customer_phone' => $customer_phone,
             'appointment_service_id' => $service_id,
+            'appointment_office' => $office,
             'appointment_date' => $appointment_date,
             'appointment_time' => $appointment_time,
             'appointment_total_price' => $total_price,
@@ -129,7 +130,16 @@ class Waxing_WooCommerce {
             $payment_type = isset($cart_item['appointment_payment_type']) ? $cart_item['appointment_payment_type'] : 'deposit';
             $payment_label = ($payment_type === 'full') ? 'Full Payment' : 'Deposit';
 
-            $product_name = "Appointment {$payment_label} - {$service_name}<br><small>Date: {$date} at {$time}</small>";
+            $office_name = '';
+            if (isset($cart_item['appointment_office'])) {
+                $office = Waxing_Services::get_office($cart_item['appointment_office']);
+                if ($office) {
+                    $office_name = $office['name'];
+                }
+            }
+            $location_line = $office_name ? "<br><small>Location: {$office_name}</small>" : '';
+
+            $product_name = "Appointment {$payment_label} - {$service_name}<br><small>Date: {$date} at {$time}</small>{$location_line}";
         }
 
         return $product_name;
@@ -167,6 +177,18 @@ class Waxing_WooCommerce {
                 'value' => $service_name,
                 'display' => $service_name
             );
+
+            if (isset($cart_item['appointment_office'])) {
+                $office = Waxing_Services::get_office($cart_item['appointment_office']);
+                if ($office) {
+                    $office_display = $office['name'] . ' (' . $office['address'] . ')';
+                    $item_data[] = array(
+                        'name'  => 'Location',
+                        'value' => $office_display,
+                        'display' => $office_display
+                    );
+                }
+            }
             $item_data[] = array(
                 'name'  => 'Appointment Date',
                 'value' => $date,
@@ -219,7 +241,12 @@ class Waxing_WooCommerce {
             $payment_type = isset($values['appointment_payment_type']) ? $values['appointment_payment_type'] : 'deposit';
             $payment_amount = isset($values['appointment_payment_amount']) ? $values['appointment_payment_amount'] : ($values['appointment_total_price'] * 0.2);
 
+            $office_value = isset($values['appointment_office']) ? $values['appointment_office'] : 'harrisburg';
+            $office = Waxing_Services::get_office($office_value);
+            $office_label = $office ? $office['name'] . ' - ' . $office['address'] : $office_value;
+
             $item->add_meta_data('Service', $service_name);
+            $item->add_meta_data('Location', $office_label);
             $item->add_meta_data('Appointment Date', $date);
             $item->add_meta_data('Appointment Time', $time);
             $item->add_meta_data('Total Price', $values['appointment_total_price']);
@@ -239,6 +266,7 @@ class Waxing_WooCommerce {
                 'customer_email' => $values['appointment_customer_email'],
                 'customer_phone' => $values['appointment_customer_phone'],
                 'service_id' => $values['appointment_service_id'],
+                'office' => $office_value,
                 'appointment_date' => $values['appointment_date'],
                 'appointment_time' => $values['appointment_time'],
                 'total_price' => $values['appointment_total_price'],
@@ -278,12 +306,17 @@ class Waxing_WooCommerce {
                 if (strlen($appointment_time) === 5) {
                     $appointment_time = $appointment_time . ':00';
                 }
-                
+
+                $appointment_office = isset($appointment_data['office'])
+                    ? Waxing_Appointments_Handler::sanitize_office($appointment_data['office'])
+                    : 'harrisburg';
+
                 // Check if appointment already exists (prevent duplicates)
                 // Compare using both formats to handle any inconsistencies
                 $existing = $wpdb->get_var($wpdb->prepare(
-                    "SELECT id FROM $appointments_table WHERE appointment_date = %s AND (appointment_time = %s OR appointment_time = %s) AND customer_email = %s AND order_id = %d",
+                    "SELECT id FROM $appointments_table WHERE appointment_date = %s AND office = %s AND (appointment_time = %s OR appointment_time = %s) AND customer_email = %s AND order_id = %d",
                     $appointment_data['appointment_date'],
+                    $appointment_office,
                     $appointment_time,
                     substr($appointment_time, 0, 5),
                     $appointment_data['customer_email'],
@@ -295,8 +328,8 @@ class Waxing_WooCommerce {
                     continue;
                 }
                 
-                // Check if time slot is still available
-                if (!Waxing_Appointments_Handler::is_time_available($appointment_data['appointment_date'], $appointment_time)) {
+                // Check if time slot is still available for this office
+                if (!Waxing_Appointments_Handler::is_time_available($appointment_data['appointment_date'], $appointment_time, $appointment_office)) {
                     error_log('WaxingAppointments: Time slot no longer available for order ' . $order_id . ' - Date: ' . $appointment_data['appointment_date'] . ' Time: ' . $appointment_time);
                     continue;
                 }
@@ -309,6 +342,7 @@ class Waxing_WooCommerce {
                         'customer_email' => $appointment_data['customer_email'],
                         'customer_phone' => $appointment_data['customer_phone'],
                         'service_id' => $appointment_data['service_id'],
+                        'office' => $appointment_office,
                         'appointment_date' => $appointment_data['appointment_date'],
                         'appointment_time' => $appointment_time,
                         'total_price' => $appointment_data['total_price'],
@@ -316,7 +350,7 @@ class Waxing_WooCommerce {
                         'status' => 'confirmed',
                         'order_id' => $order_id
                     ),
-                    array('%s', '%s', '%s', '%s', '%s', '%s', '%f', '%f', '%s', '%d')
+                    array('%s', '%s', '%s', '%s', '%s', '%s', '%s', '%f', '%f', '%s', '%d')
                 );
                 
                 if ($result) {
@@ -324,7 +358,7 @@ class Waxing_WooCommerce {
                     error_log('WaxingAppointments: Successfully created appointment ID ' . $appointment_id . ' for order ' . $order_id);
                     
                     // Mark time as unavailable
-                    Waxing_Appointments_Handler::mark_time_unavailable($appointment_data['appointment_date'], $appointment_time);
+                    Waxing_Appointments_Handler::mark_time_unavailable($appointment_data['appointment_date'], $appointment_time, $appointment_office);
 
                     // Update order item meta with appointment ID
                     wc_update_order_item_meta($item_id, 'Appointment ID', $appointment_id);

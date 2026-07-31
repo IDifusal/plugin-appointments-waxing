@@ -3,7 +3,7 @@
  * Plugin Name: Waxing Appointments
  * Plugin URI: https://difusal.com
  * Description: Simple appointment booking system for waxing services with WooCommerce integration
- * Version: 2.5.3
+ * Version: 3.0.3
  * Author: Difusal
  * License: GPL v2 or later
  * Requires at least: 5.0
@@ -16,7 +16,7 @@ if (!defined('ABSPATH')) {
     exit;
 }
 
-define('WAXING_APPOINTMENTS_VERSION', '2.5.3');
+define('WAXING_APPOINTMENTS_VERSION', '3.0.3');
 define('WAXING_APPOINTMENTS_PLUGIN_DIR', plugin_dir_path(__FILE__));
 define('WAXING_APPOINTMENTS_PLUGIN_URL', plugin_dir_url(__FILE__));
 
@@ -35,6 +35,12 @@ require_once WAXING_APPOINTMENTS_PLUGIN_DIR . 'includes/class-waxing-calendar-ad
  * Main plugin class
  */
 class WaxingAppointments {
+
+    /**
+     * Schema version. Bump only when the database layout changes.
+     */
+    const DB_VERSION = '2';
+
     
     public function __construct() {
         add_action('init', array($this, 'init'));
@@ -43,6 +49,20 @@ class WaxingAppointments {
     }
     
     public function init() {
+        // Ensure the schema is up to date (adds the office column / unique key on
+        // installs that were activated before multi-location support existed).
+        //
+        // Gated on a dedicated schema version, not the plugin version: the
+        // migration only needs to run once, and tying it to the plugin version
+        // would re-run it on every release. The flag is only written when the
+        // upgrade actually reports success, so a failed ALTER retries on the
+        // next request instead of leaving queries pointed at a missing column.
+        if (get_option('waxing_appointments_db_version') !== self::DB_VERSION) {
+            if (Waxing_Database::maybe_upgrade_office_schema()) {
+                update_option('waxing_appointments_db_version', self::DB_VERSION);
+            }
+        }
+
         // Frontend
         add_action('wp_enqueue_scripts', array('Waxing_Frontend', 'enqueue_scripts'));
         add_action('wp_footer', array('Waxing_Frontend', 'add_appointment_modal'));
@@ -53,6 +73,8 @@ class WaxingAppointments {
         add_action('wp_ajax_nopriv_book_appointment', array('Waxing_Appointments_Handler', 'handle_appointment_booking'));
         add_action('wp_ajax_check_availability', array('Waxing_Appointments_Handler', 'check_availability'));
         add_action('wp_ajax_nopriv_check_availability', array('Waxing_Appointments_Handler', 'check_availability'));
+        add_action('wp_ajax_waxing_refresh_nonce', array('Waxing_Frontend', 'refresh_nonce'));
+        add_action('wp_ajax_nopriv_waxing_refresh_nonce', array('Waxing_Frontend', 'refresh_nonce'));
         
         // Admin
         add_action('admin_menu', array('Waxing_Admin', 'add_admin_menu'));

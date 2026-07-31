@@ -31,8 +31,36 @@ class Waxing_Frontend {
             'ajax_url' => admin_url('admin-ajax.php'),
             'nonce' => wp_create_nonce('waxing_appointments_nonce')
         ));
+
+        // The localized nonce above is printed inline into the page, so a
+        // full-page cache can serve a nonce from an expired tick (or another
+        // session) long after the JS file itself has been revalidated. That
+        // mismatch is what makes admin-ajax.php answer 403 / -1. Refresh the
+        // nonce from an uncached endpoint once the modal script boots.
+        wp_add_inline_script(
+            'waxing-appointments',
+            'jQuery(function($){'
+            . '$.post(waxing_ajax.ajax_url, {action: "waxing_refresh_nonce"}, function(r){'
+            . 'if (r && r.success && r.data && r.data.nonce) { waxing_ajax.nonce = r.data.nonce; }'
+            . '});'
+            . '});'
+        );
     }
     
+    /**
+     * Return a fresh booking nonce.
+     *
+     * Intentionally has no nonce check of its own: it issues a nonce rather
+     * than acting on one, and the nonce it returns is still bound to the
+     * caller's own session, so it grants nothing a page load wouldn't.
+     */
+    public static function refresh_nonce() {
+        nocache_headers();
+        wp_send_json_success(array(
+            'nonce' => wp_create_nonce('waxing_appointments_nonce'),
+        ));
+    }
+
     /**
      * Appointment button shortcode
      */
@@ -62,6 +90,7 @@ class Waxing_Frontend {
      */
     public static function add_appointment_modal() {
         $services = Waxing_Services::get_waxing_services();
+        $offices = Waxing_Services::get_offices();
         include WAXING_APPOINTMENTS_PLUGIN_DIR . 'includes/views/appointment-modal.php';
     }
 }

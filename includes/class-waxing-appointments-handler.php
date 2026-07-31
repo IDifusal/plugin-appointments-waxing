@@ -28,14 +28,17 @@ class Waxing_Appointments_Handler {
                 $date = $dt->format('Y-m-d');
             }
         }
-        
+
+        $office = self::sanitize_office(isset($_POST['office']) ? $_POST['office'] : '');
+
         global $wpdb;
         $appointments_table = Waxing_Database::get_table_name();
-        
-        // Get all booked, confirmed, or blocked slots for this date
+
+        // Get all booked, confirmed, or blocked slots for this date and office
         $booked_slots = $wpdb->get_results($wpdb->prepare(
-            "SELECT appointment_time FROM $appointments_table WHERE appointment_date = %s AND status IN ('booked', 'confirmed', 'blocked')",
-            $date
+            "SELECT appointment_time FROM $appointments_table WHERE appointment_date = %s AND office = %s AND status IN ('booked', 'confirmed', 'blocked')",
+            $date,
+            $office
         ));
         
         $booked_times = array();
@@ -71,8 +74,14 @@ class Waxing_Appointments_Handler {
         $email = sanitize_email($_POST['customer_email']);
         $phone = sanitize_text_field($_POST['customer_phone']);
         $service = sanitize_text_field($_POST['service']);
+        $office = self::sanitize_office(isset($_POST['office']) ? $_POST['office'] : '');
         $date = sanitize_text_field($_POST['appointment_date']);
         $payment_type = isset($_POST['payment_type']) ? sanitize_text_field($_POST['payment_type']) : 'deposit';
+
+        if (!Waxing_Services::get_office($office)) {
+            wp_send_json_error('Please select a valid location.');
+            return;
+        }
 
         // Normalize date to Y-m-d if a slash-formatted string is received
         if (strpos($date, '/') !== false) {
@@ -82,8 +91,8 @@ class Waxing_Appointments_Handler {
             }
         }
         $time = sanitize_text_field($_POST['appointment_time']);
-        
-        if (!self::is_time_available($date, $time)) {
+
+        if (!self::is_time_available($date, $time, $office)) {
             wp_send_json_error('This time slot is no longer available.');
             return;
         }
@@ -115,7 +124,7 @@ class Waxing_Appointments_Handler {
         // Just validate availability and create checkout session with temporary data
         
         try {
-            $checkout_url = Waxing_WooCommerce::create_checkout_session($product_id, $payment_amount, $name, $email, $phone, $service, $date, $time, $total_price, $payment_type);
+            $checkout_url = Waxing_WooCommerce::create_checkout_session($product_id, $payment_amount, $name, $email, $phone, $service, $date, $time, $total_price, $payment_type, $office);
             if ($checkout_url === home_url()) {
                 throw new Exception('Failed to create checkout session');
             }
@@ -127,29 +136,45 @@ class Waxing_Appointments_Handler {
     }
     
     /**
-     * Check if a time slot is available
+     * Sanitize an office slug, falling back to the first configured office.
      */
-    public static function is_time_available($date, $time) {
+    public static function sanitize_office($office) {
+        $office = sanitize_text_field($office);
+        if (Waxing_Services::get_office($office)) {
+            return $office;
+        }
+
+        // Default to the first configured office for backward compatibility.
+        $offices = Waxing_Services::get_offices();
+        return key($offices);
+    }
+
+    /**
+     * Check if a time slot is available for a given office
+     */
+    public static function is_time_available($date, $time, $office = null) {
         global $wpdb;
         $appointments_table = Waxing_Database::get_table_name();
-        
+
+        $office = self::sanitize_office($office);
+
         // Normalize time format to HH:MM:SS for database comparison
         if (strlen($time) === 5) {
             $time = $time . ':00';
         }
-        
+
         // Check if time is within business hours
         if (!self::is_business_hours($date, $time)) {
             return false;
         }
-        
+
         // Time is available if no record exists with booked, confirmed, or blocked status
-        // Compare using LIKE to handle both HH:MM:SS and HH:MM formats in database
+        // for this office. Compare both HH:MM:SS and HH:MM formats in the database.
         $result = $wpdb->get_var($wpdb->prepare(
-            "SELECT COUNT(*) FROM $appointments_table WHERE appointment_date = %s AND (appointment_time = %s OR appointment_time = %s) AND status IN ('booked', 'confirmed', 'blocked')",
-            $date, $time, substr($time, 0, 5)
+            "SELECT COUNT(*) FROM $appointments_table WHERE appointment_date = %s AND office = %s AND (appointment_time = %s OR appointment_time = %s) AND status IN ('booked', 'confirmed', 'blocked')",
+            $date, $office, $time, substr($time, 0, 5)
         ));
-        
+
         return $result == 0;
     }
     
@@ -177,32 +202,36 @@ class Waxing_Appointments_Handler {
     /**
      * Mark time slot as unavailable
      */
-    public static function mark_time_unavailable($date, $time) {
+    public static function mark_time_unavailable($date, $time, $office = null) {
         global $wpdb;
         $appointments_table = Waxing_Database::get_table_name();
-        
+
+        $office = self::sanitize_office($office);
+
         // Update status to booked/confirmed if exists with pending status
         $wpdb->update(
             $appointments_table,
             array('status' => 'confirmed'),
-            array('appointment_date' => $date, 'appointment_time' => $time, 'status' => 'pending'),
+            array('appointment_date' => $date, 'appointment_time' => $time, 'office' => $office, 'status' => 'pending'),
             array('%s'),
-            array('%s', '%s', '%s')
+            array('%s', '%s', '%s', '%s')
         );
     }
     
     /**
      * Mark time slot as available
      */
-    public static function mark_time_available($date, $time) {
+    public static function mark_time_available($date, $time, $office = null) {
         global $wpdb;
         $appointments_table = Waxing_Database::get_table_name();
-        
+
+        $office = self::sanitize_office($office);
+
         // Delete the blocked slot
         $wpdb->delete(
             $appointments_table,
-            array('appointment_date' => $date, 'appointment_time' => $time, 'status' => 'blocked'),
-            array('%s', '%s', '%s')
+            array('appointment_date' => $date, 'appointment_time' => $time, 'office' => $office, 'status' => 'blocked'),
+            array('%s', '%s', '%s', '%s')
         );
     }
 }

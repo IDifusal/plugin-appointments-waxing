@@ -30,6 +30,7 @@ if (!defined('ABSPATH')) {
                 <th>Customer</th>
                 <th>Email</th>
                 <th>Phone</th>
+                <th>Location</th>
                 <th>Service</th>
                 <th>Date</th>
                 <th>Time</th>
@@ -41,7 +42,7 @@ if (!defined('ABSPATH')) {
         <tbody>
             <?php if (empty($appointments)): ?>
             <tr>
-                <td colspan="10" style="text-align: center; padding: 20px;">
+                <td colspan="11" style="text-align: center; padding: 20px;">
                     No appointments found. Appointments will appear here after payment is completed.
                 </td>
             </tr>
@@ -52,6 +53,10 @@ if (!defined('ABSPATH')) {
                     <td><?php echo esc_html($appointment->customer_name); ?></td>
                     <td><?php echo esc_html($appointment->customer_email); ?></td>
                     <td><?php echo esc_html($appointment->customer_phone); ?></td>
+                    <td><?php
+                        $office = Waxing_Services::get_office($appointment->office);
+                        echo esc_html($office ? $office['name'] : ucwords(str_replace('_', ' ', $appointment->office)));
+                    ?></td>
                     <td><?php echo esc_html(str_replace('_', ' ', ucwords($appointment->service_id))); ?></td>
                     <td><?php 
                         // Format date without timezone conversion

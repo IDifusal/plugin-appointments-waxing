@@ -874,6 +874,14 @@ if (!defined('ABSPATH')) {
                                 <div class="legend-color available"></div>
                                 <span>Available</span>
                             </div>
+                            <div class="legend-item">
+                                <div class="legend-color" style="background:#0073aa;"></div>
+                                <span>HBG — Harrisburg</span>
+                            </div>
+                            <div class="legend-item">
+                                <div class="legend-color" style="background:#7b3fbf;"></div>
+                                <span>IT — Indian Trail</span>
+                            </div>
                         </div>
                         
                         <div id="calendar"></div>
@@ -1294,6 +1302,7 @@ if (!defined('ABSPATH')) {
                                 '<strong>👤 Customer:</strong> ' + extendedProps.customer_name + '<br>' +
                                 '<strong>📧 Email:</strong> ' + extendedProps.customer_email + '<br>' +
                                 '<strong>📞 Phone:</strong> ' + extendedProps.customer_phone + '<br>' +
+                                '<strong>📍 Location:</strong> ' + (extendedProps.office_name || '—') + '<br>' +
                                 '<strong>💄 Service:</strong> ' + extendedProps.service + '<br>' +
                                 '<strong>📊 Status:</strong> ' + extendedProps.status + '<br>' +
                                 '<strong>💰 Total:</strong> $' + extendedProps.total_price + '<br>' +
@@ -1433,8 +1442,8 @@ if (!defined('ABSPATH')) {
                     ],
                     slotMinTime: '09:00:00',
                     slotMaxTime: '19:00:00',
-                    slotDuration: '01:00:00', // 1 hour slots
-                    snapDuration: '01:00:00' // Snap to 1 hour intervals
+                    slotDuration: '00:30:00', // 30 minute slots
+                    snapDuration: '00:30:00' // Snap to 30 minute intervals
                 });
                 
                 calendar.render();

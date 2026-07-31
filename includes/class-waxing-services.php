@@ -10,7 +10,38 @@ if (!defined('ABSPATH')) {
 }
 
 class Waxing_Services {
-    
+
+    /**
+     * Get the list of bookable office locations.
+     *
+     * @return array Array of offices keyed by a stable slug used for storage.
+     */
+    public static function get_offices() {
+        return array(
+            'harrisburg' => array(
+                'value'   => 'harrisburg',
+                'name'    => 'Harrisburg',
+                'address' => '7475 - 4250 Main St, Harrisburg, NC 28075',
+            ),
+            'indian_trail' => array(
+                'value'   => 'indian_trail',
+                'name'    => 'Indian Trail',
+                'address' => '115 Unionville Indian Trail Rd, Indian Trail, NC 28079',
+            ),
+        );
+    }
+
+    /**
+     * Get a single office by its slug.
+     *
+     * @param string $office_value Office slug.
+     * @return array|null Office data or null if not found.
+     */
+    public static function get_office($office_value) {
+        $offices = self::get_offices();
+        return isset($offices[$office_value]) ? $offices[$office_value] : null;
+    }
+
     /**
      * Get business hours for a specific day of week
      * 
@@ -64,11 +95,11 @@ class Waxing_Services {
         $end_time = strtotime($business_hours['end_time']);
         $slots = array();
         
-        // Generate hourly slots
+        // Generate 30-minute slots
         $current = $start_time;
         while ($current < $end_time) {
             $slots[] = date('H:i', $current);
-            $current = strtotime('+1 hour', $current);
+            $current = strtotime('+30 minutes', $current);
         }
         
         return $slots;

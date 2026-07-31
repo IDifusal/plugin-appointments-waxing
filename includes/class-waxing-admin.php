@@ -81,6 +81,40 @@ class Waxing_Admin {
             echo '<div class="notice notice-success"><p>Calendar admin credentials updated successfully!</p></div>';
         }
 
+        if (isset($_POST['submit_add_calendar_user'])) {
+            check_admin_referer('waxing_calendar_users');
+
+            $new_username = sanitize_text_field($_POST['new_calendar_username']);
+            $new_password = sanitize_text_field($_POST['new_calendar_password']);
+            $calendar_users = get_option('waxing_calendar_admin_users', array());
+            $primary_username = get_option('waxing_calendar_admin_username', 'admin');
+
+            if (empty($new_username) || empty($new_password)) {
+                echo '<div class="notice notice-error"><p>Username and password are required.</p></div>';
+            } elseif ($new_username === $primary_username || isset($calendar_users[$new_username])) {
+                echo '<div class="notice notice-error"><p>A calendar admin user with that username already exists.</p></div>';
+            } else {
+                $calendar_users[$new_username] = password_hash($new_password, PASSWORD_DEFAULT);
+                update_option('waxing_calendar_admin_users', $calendar_users);
+                echo '<div class="notice notice-success"><p>Calendar admin user <strong>' . esc_html($new_username) . '</strong> created successfully!</p></div>';
+            }
+        }
+
+        if (isset($_POST['submit_delete_calendar_user'])) {
+            check_admin_referer('waxing_calendar_users');
+
+            $delete_username = sanitize_text_field($_POST['delete_calendar_username']);
+            $calendar_users = get_option('waxing_calendar_admin_users', array());
+
+            if (isset($calendar_users[$delete_username])) {
+                unset($calendar_users[$delete_username]);
+                update_option('waxing_calendar_admin_users', $calendar_users);
+                echo '<div class="notice notice-success"><p>Calendar admin user <strong>' . esc_html($delete_username) . '</strong> deleted.</p></div>';
+            } else {
+                echo '<div class="notice notice-error"><p>User not found.</p></div>';
+            }
+        }
+
         if (isset($_POST['submit_stripe'])) {
             check_admin_referer('waxing_stripe_settings');
 
@@ -113,6 +147,7 @@ class Waxing_Admin {
 
         $current_username = get_option('waxing_calendar_admin_username', 'admin');
         $current_password = get_option('waxing_calendar_admin_password', 'waxing2024');
+        $calendar_users = get_option('waxing_calendar_admin_users', array());
         $current_stripe_key = get_option('waxing_stripe_secret_key', '');
         $current_stripe_mode = get_option('waxing_stripe_mode', 'sandbox');
         $current_twilio_sid = get_option('waxing_twilio_account_sid', '');
