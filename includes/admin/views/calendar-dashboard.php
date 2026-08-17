@@ -971,6 +971,43 @@ if (!defined('ABSPATH')) {
             </div>
             
             <script>
+            // Session expired / not authenticated handling.
+            //
+            // The dashboard HTML stays on screen after the login expires, so a plain
+            // toast reads as "the calendar is broken". Send the admin back to the
+            // login screen instead.
+            var waxingRedirectingToLogin = false;
+
+            function waxingErrorMessage(data) {
+                if (!data) {
+                    return '';
+                }
+                if (typeof data === 'string') {
+                    return data;
+                }
+                return data.message || '';
+            }
+
+            function waxingHandleAuthError(response) {
+                var data = response && response.data;
+                var code = data && typeof data === 'object' ? data.code : '';
+                var message = waxingErrorMessage(data);
+
+                if (code !== 'not_authenticated' && message.indexOf('Not authenticated') === -1) {
+                    return false;
+                }
+
+                if (!waxingRedirectingToLogin) {
+                    waxingRedirectingToLogin = true;
+                    showToast('Your session expired. Redirecting to login...', 'error');
+                    setTimeout(function() {
+                        window.location.href = '<?php echo esc_url(home_url('/calendar-admin')); ?>';
+                    }, 1500);
+                }
+
+                return true;
+            }
+
             // Toast notification functions
             function showToast(message, type) {
                 type = type || 'success';
@@ -1149,7 +1186,9 @@ if (!defined('ABSPATH')) {
                             resultContainer.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
                         } else {
                             errorContainer.style.display = 'block';
-                            errorContainer.textContent = 'Error: ' + (response.data || 'Failed to generate payment link');
+                            if (!waxingHandleAuthError(response)) {
+                                errorContainer.textContent = 'Error: ' + (waxingErrorMessage(response.data) || 'Failed to generate payment link');
+                            }
                             resultContainer.classList.remove('show');
                         }
                     },
@@ -1238,6 +1277,7 @@ if (!defined('ABSPATH')) {
                                 successCallback(response.data.events || []);
                             }
                         } else {
+                            waxingHandleAuthError(response);
                             if (failureCallback) {
                                 failureCallback();
                             }
@@ -1600,25 +1640,27 @@ if (!defined('ABSPATH')) {
                                     // refetchEvents returns a promise
                                     refetchResult.then(function() {
                                         showBlockLoader(false);
-                                        showToast(response.data || 'Time slot blocked successfully', 'success');
+                                        showToast(waxingErrorMessage(response.data) || 'Time slot blocked successfully', 'success');
                                     }).catch(function() {
                                         showBlockLoader(false);
-                                        showToast(response.data || 'Time slot blocked successfully', 'success');
+                                        showToast(waxingErrorMessage(response.data) || 'Time slot blocked successfully', 'success');
                                     });
                                 } else {
                                     // refetchEvents doesn't return a promise, wait a bit for render
                                     setTimeout(function() {
                                         showBlockLoader(false);
-                                        showToast(response.data || 'Time slot blocked successfully', 'success');
+                                        showToast(waxingErrorMessage(response.data) || 'Time slot blocked successfully', 'success');
                                     }, 300);
                                 }
                             } else {
                                 showBlockLoader(false);
-                                showToast(response.data || 'Time slot blocked successfully', 'success');
+                                showToast(waxingErrorMessage(response.data) || 'Time slot blocked successfully', 'success');
                             }
                         } else {
                             showBlockLoader(false);
-                            showToast('Error: ' + response.data, 'error');
+                            if (!waxingHandleAuthError(response)) {
+                                showToast('Error: ' + waxingErrorMessage(response.data), 'error');
+                            }
                         }
                     },
                     error: function() {
@@ -1902,7 +1944,9 @@ if (!defined('ABSPATH')) {
                             }
                         } else {
                             showBlockLoader(false);
-                            showToast('Error: ' + response.data, 'error');
+                            if (!waxingHandleAuthError(response)) {
+                                showToast('Error: ' + waxingErrorMessage(response.data), 'error');
+                            }
                         }
                     },
                     error: function() {
@@ -2044,28 +2088,30 @@ if (!defined('ABSPATH')) {
                                                 refetchResult.then(function() {
                                                     updateDayBlockButtons(dateStr, false);
                                                     showBlockLoader(false);
-                                                    showToast(response.data, 'success');
+                                                    showToast(waxingErrorMessage(response.data) || 'Done', 'success');
                                                 }).catch(function() {
                                                     updateDayBlockButtons(dateStr, false);
                                                     showBlockLoader(false);
-                                                    showToast(response.data, 'success');
+                                                    showToast(waxingErrorMessage(response.data) || 'Done', 'success');
                                                 });
                                             } else {
                                                 // refetchEvents doesn't return a promise, wait a bit for render
                                                 setTimeout(function() {
                                                     updateDayBlockButtons(dateStr, false);
                                                     showBlockLoader(false);
-                                                    showToast(response.data, 'success');
+                                                    showToast(waxingErrorMessage(response.data) || 'Done', 'success');
                                                 }, 300);
                                             }
                                         } else {
                                             updateDayBlockButtons(dateStr, false);
                                             showBlockLoader(false);
-                                            showToast(response.data, 'success');
+                                            showToast(waxingErrorMessage(response.data) || 'Done', 'success');
                                         }
                                     } else {
                                         showBlockLoader(false);
-                                        showToast('Error: ' + response.data, 'error');
+                                        if (!waxingHandleAuthError(response)) {
+                                            showToast('Error: ' + waxingErrorMessage(response.data), 'error');
+                                        }
                                     }
                                 },
                                 error: function() {
@@ -2105,28 +2151,30 @@ if (!defined('ABSPATH')) {
                                                 refetchResult.then(function() {
                                                     updateDayBlockButtons(dateStr, true);
                                                     showBlockLoader(false);
-                                                    showToast(response.data, 'success');
+                                                    showToast(waxingErrorMessage(response.data) || 'Done', 'success');
                                                 }).catch(function() {
                                                     updateDayBlockButtons(dateStr, true);
                                                     showBlockLoader(false);
-                                                    showToast(response.data, 'success');
+                                                    showToast(waxingErrorMessage(response.data) || 'Done', 'success');
                                                 });
                                             } else {
                                                 // refetchEvents doesn't return a promise, wait a bit for render
                                                 setTimeout(function() {
                                                     updateDayBlockButtons(dateStr, true);
                                                     showBlockLoader(false);
-                                                    showToast(response.data, 'success');
+                                                    showToast(waxingErrorMessage(response.data) || 'Done', 'success');
                                                 }, 300);
                                             }
                                         } else {
                                             updateDayBlockButtons(dateStr, true);
                                             showBlockLoader(false);
-                                            showToast(response.data, 'success');
+                                            showToast(waxingErrorMessage(response.data) || 'Done', 'success');
                                         }
                                     } else {
                                         showBlockLoader(false);
-                                        showToast('Error: ' + response.data, 'error');
+                                        if (!waxingHandleAuthError(response)) {
+                                            showToast('Error: ' + waxingErrorMessage(response.data), 'error');
+                                        }
                                     }
                                 },
                                 error: function() {

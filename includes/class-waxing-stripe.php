@@ -15,15 +15,7 @@ class Waxing_Stripe {
      * Generate Stripe payment link
      */
     public static function generate_payment_link() {
-        // Ensure session is started for calendar admin
-        if (session_status() === PHP_SESSION_NONE) {
-            session_start();
-        }
-        
-        // Check standalone authentication
-        if (!isset($_SESSION['calendar_admin_logged_in']) || !$_SESSION['calendar_admin_logged_in']) {
-            wp_send_json_error('Not authenticated - please login first');
-        }
+        Waxing_Calendar_Admin::require_auth();
         
         // Verify nonce
         if (!isset($_POST['nonce']) || !wp_verify_nonce($_POST['nonce'], 'waxing_appointments_nonce')) {
@@ -168,15 +160,7 @@ class Waxing_Stripe {
      * Get payment links history
      */
     public static function get_payment_links_history() {
-        // Ensure session is started for calendar admin
-        if (session_status() === PHP_SESSION_NONE) {
-            session_start();
-        }
-        
-        // Check standalone authentication
-        if (!isset($_SESSION['calendar_admin_logged_in']) || !$_SESSION['calendar_admin_logged_in']) {
-            wp_send_json_error('Not authenticated - please login first');
-        }
+        Waxing_Calendar_Admin::require_auth();
         
         global $wpdb;
         $payment_links_table = Waxing_Database::get_payment_links_table_name();

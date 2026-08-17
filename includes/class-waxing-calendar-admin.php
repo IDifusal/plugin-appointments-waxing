@@ -12,7 +12,119 @@ if (!defined('ABSPATH')) {
 require_once WAXING_APPOINTMENTS_PLUGIN_DIR . 'includes/admin/class-waxing-calendar-admin-views.php';
 
 class Waxing_Calendar_Admin {
-    
+
+    /**
+     * Name of the auth cookie issued on successful calendar admin login.
+     */
+    const AUTH_COOKIE = 'waxing_calendar_auth';
+
+    /**
+     * How long a calendar admin stays logged in (12 hours).
+     */
+    const AUTH_LIFETIME = 43200;
+
+    /**
+     * Issue an auth token for a calendar admin user.
+     *
+     * The token is stored in a transient and handed to the browser in a cookie
+     * scoped to the whole site. PHP sessions are not reliable here: page caches
+     * strip PHPSESSID, session.gc_maxlifetime expires the session while the
+     * dashboard is still on screen, and multi-worker hosting can lose the
+     * session file between the page render and the admin-ajax.php request.
+     */
+    private static function issue_auth_token($username) {
+        $token = wp_generate_password(48, false, false);
+
+        set_transient('waxing_cal_auth_' . $token, array(
+            'user' => $username,
+            'login_time' => time(),
+        ), self::AUTH_LIFETIME);
+
+        setcookie(
+            self::AUTH_COOKIE,
+            $token,
+            array(
+                'expires' => time() + self::AUTH_LIFETIME,
+                'path' => '/',
+                'secure' => is_ssl(),
+                'httponly' => true,
+                'samesite' => 'Lax',
+            )
+        );
+        $_COOKIE[self::AUTH_COOKIE] = $token;
+
+        return $token;
+    }
+
+    /**
+     * Validate the current request's calendar admin credentials.
+     *
+     * Accepts the cookie token first, then falls back to a legacy PHP session
+     * so admins who are already logged in are not kicked out by this upgrade.
+     */
+    public static function is_authenticated() {
+        if (!empty($_COOKIE[self::AUTH_COOKIE])) {
+            $token = sanitize_text_field(wp_unslash($_COOKIE[self::AUTH_COOKIE]));
+            $data = get_transient('waxing_cal_auth_' . $token);
+
+            if (!empty($data) && !empty($data['user'])) {
+                return true;
+            }
+        }
+
+        // Legacy session fallback (pre-token logins).
+        if (session_status() === PHP_SESSION_NONE && !headers_sent()) {
+            session_start();
+        }
+
+        return !empty($_SESSION['calendar_admin_logged_in']);
+    }
+
+    /**
+     * Clear the current calendar admin credentials.
+     */
+    public static function clear_auth() {
+        if (!empty($_COOKIE[self::AUTH_COOKIE])) {
+            $token = sanitize_text_field(wp_unslash($_COOKIE[self::AUTH_COOKIE]));
+            delete_transient('waxing_cal_auth_' . $token);
+
+            setcookie(self::AUTH_COOKIE, '', array(
+                'expires' => time() - 3600,
+                'path' => '/',
+                'secure' => is_ssl(),
+                'httponly' => true,
+                'samesite' => 'Lax',
+            ));
+            unset($_COOKIE[self::AUTH_COOKIE]);
+        }
+
+        if (session_status() === PHP_SESSION_NONE && !headers_sent()) {
+            session_start();
+        }
+
+        if (session_status() === PHP_SESSION_ACTIVE) {
+            $_SESSION = array();
+            session_destroy();
+        }
+    }
+
+    /**
+     * Reject an unauthenticated AJAX request.
+     *
+     * Sends a machine-readable code so the dashboard can redirect to the login
+     * screen instead of showing a toast over a calendar that still looks fine.
+     */
+    public static function require_auth() {
+        if (self::is_authenticated()) {
+            return;
+        }
+
+        wp_send_json_error(array(
+            'code' => 'not_authenticated',
+            'message' => 'Not authenticated - please login first',
+        ));
+    }
+
     /**
      * Handle calendar admin route
      */
@@ -30,18 +142,21 @@ class Waxing_Calendar_Admin {
             substr($path, -15) === '/calendar-admin' ||
             (is_404() && strpos($request_uri, 'calendar-admin') !== false)) {
             
-            if (!session_id()) {
-                session_start();
+            // Never let a page cache / CDN serve this route: a cached copy would
+            // drop the auth cookie and show the dashboard to a logged-out visitor.
+            if (!defined('DONOTCACHEPAGE')) {
+                define('DONOTCACHEPAGE', true);
             }
-            
+            nocache_headers();
+
             // Handle logout
             if (isset($_GET['logout'])) {
-                session_destroy();
+                self::clear_auth();
                 wp_redirect(home_url('/calendar-admin'));
                 exit;
             }
-            
-            if (!isset($_SESSION['calendar_admin_logged_in']) || !$_SESSION['calendar_admin_logged_in']) {
+
+            if (!self::is_authenticated()) {
                 Waxing_Calendar_Admin_Views::show_login();
                 exit;
             } else {
@@ -90,12 +205,7 @@ class Waxing_Calendar_Admin {
         }
 
         if ($authenticated) {
-            if (!session_id()) {
-                session_start();
-            }
-            $_SESSION['calendar_admin_logged_in'] = true;
-            $_SESSION['calendar_admin_user'] = $username;
-            $_SESSION['calendar_admin_login_time'] = time();
+            self::issue_auth_token($username);
             wp_send_json_success('Login successful');
         } else {
             wp_send_json_error('Invalid credentials');
@@ -106,15 +216,7 @@ class Waxing_Calendar_Admin {
      * Handle blocking calendar time
      */
     public static function handle_block_time() {
-        // Ensure session is started
-        if (session_status() === PHP_SESSION_NONE) {
-            session_start();
-        }
-        
-        // Check standalone authentication
-        if (!isset($_SESSION['calendar_admin_logged_in']) || !$_SESSION['calendar_admin_logged_in']) {
-            wp_send_json_error('Not authenticated - please login first');
-        }
+        Waxing_Calendar_Admin::require_auth();
         
         if (!isset($_POST['date']) || !isset($_POST['time'])) {
             wp_send_json_error('Missing date or time parameters');
@@ -204,15 +306,7 @@ class Waxing_Calendar_Admin {
      * Handle unblocking calendar time
      */
     public static function handle_unblock_time() {
-        // Ensure session is started
-        if (session_status() === PHP_SESSION_NONE) {
-            session_start();
-        }
-        
-        // Check standalone authentication
-        if (!isset($_SESSION['calendar_admin_logged_in']) || !$_SESSION['calendar_admin_logged_in']) {
-            wp_send_json_error('Not authenticated - please login first');
-        }
+        Waxing_Calendar_Admin::require_auth();
         
         if (!isset($_POST['date']) || !isset($_POST['time'])) {
             wp_send_json_error('Missing date or time parameters');
@@ -258,15 +352,7 @@ class Waxing_Calendar_Admin {
      * Handle blocking entire day
      */
     public static function handle_block_day() {
-        // Ensure session is started
-        if (session_status() === PHP_SESSION_NONE) {
-            session_start();
-        }
-        
-        // Check standalone authentication
-        if (!isset($_SESSION['calendar_admin_logged_in']) || !$_SESSION['calendar_admin_logged_in']) {
-            wp_send_json_error('Not authenticated - please login first');
-        }
+        Waxing_Calendar_Admin::require_auth();
         
         if (!isset($_POST['date'])) {
             wp_send_json_error('Missing date parameter');
@@ -367,15 +453,7 @@ class Waxing_Calendar_Admin {
      * Handle unblocking entire day
      */
     public static function handle_unblock_day() {
-        // Ensure session is started
-        if (session_status() === PHP_SESSION_NONE) {
-            session_start();
-        }
-        
-        // Check standalone authentication
-        if (!isset($_SESSION['calendar_admin_logged_in']) || !$_SESSION['calendar_admin_logged_in']) {
-            wp_send_json_error('Not authenticated - please login first');
-        }
+        Waxing_Calendar_Admin::require_auth();
         
         if (!isset($_POST['date'])) {
             wp_send_json_error('Missing date parameter');
@@ -603,13 +681,7 @@ class Waxing_Calendar_Admin {
      * Handle AJAX request to get calendar events
      */
     public static function handle_get_calendar_events() {
-        if (session_status() === PHP_SESSION_NONE) {
-            session_start();
-        }
-        
-        if (!isset($_SESSION['calendar_admin_logged_in']) || !$_SESSION['calendar_admin_logged_in']) {
-            wp_send_json_error('Not authenticated - please login first');
-        }
+        Waxing_Calendar_Admin::require_auth();
         
         $data = self::get_calendar_data();
         wp_send_json_success($data);

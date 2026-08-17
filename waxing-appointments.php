@@ -3,7 +3,7 @@
  * Plugin Name: Waxing Appointments
  * Plugin URI: https://difusal.com
  * Description: Simple appointment booking system for waxing services with WooCommerce integration
- * Version: 3.0.3
+ * Version: 3.0.4
  * Author: Difusal
  * License: GPL v2 or later
  * Requires at least: 5.0
@@ -16,7 +16,7 @@ if (!defined('ABSPATH')) {
     exit;
 }
 
-define('WAXING_APPOINTMENTS_VERSION', '3.0.3');
+define('WAXING_APPOINTMENTS_VERSION', '3.0.4');
 define('WAXING_APPOINTMENTS_PLUGIN_DIR', plugin_dir_path(__FILE__));
 define('WAXING_APPOINTMENTS_PLUGIN_URL', plugin_dir_url(__FILE__));
 
