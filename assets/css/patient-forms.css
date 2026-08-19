@@ -1,0 +1,696 @@
+/**
+ * Patient intake forms.
+ *
+ * Mobile-first: single column by default, widening at 640px. Tap targets are
+ * kept at 44px+ and font-size at 16px on inputs so iOS doesn't zoom on focus.
+ */
+
+.waxing-patient-form-wrap {
+    /* Palette lifted from the booking modal (assets/css/appointments.css) so
+       both flows read as one product. Keep these in sync with that file. */
+    --wx-accent: #2383f0;
+    --wx-accent-dark: #1b6ac8;
+    --wx-accent-soft: rgba(35, 131, 240, 0.1);
+    --wx-accent-tint: #f0f7ff;
+    --wx-accent-muted: #a8c6f0;
+    --wx-text: #333;
+    --wx-muted: #64748b;
+    --wx-border: #e1e8f0;
+    --wx-bg: #ffffff;
+    --wx-subtle: #f8f9fa;
+    --wx-radius: 12px;
+    --wx-error: #dc3545;
+
+    max-width: 780px;
+    margin: 0 auto;
+    padding: 0 16px;
+    color: var(--wx-text);
+    font-size: 16px;
+    line-height: 1.5;
+    box-sizing: border-box;
+}
+
+.waxing-patient-form-wrap *,
+.waxing-patient-form-wrap *::before,
+.waxing-patient-form-wrap *::after {
+    box-sizing: inherit;
+}
+
+.waxing-patient-form {
+    background: var(--wx-bg);
+    border: 1px solid var(--wx-border);
+    border-radius: var(--wx-radius);
+    padding: 24px 20px 20px;
+}
+
+/* ---------- Header ---------- */
+
+.waxing-form-header {
+    margin-bottom: 20px;
+}
+
+.waxing-form-title {
+    margin: 0 0 8px;
+    font-size: 1.5rem;
+    line-height: 1.25;
+}
+
+.waxing-form-intro {
+    margin: 0;
+    color: var(--wx-muted);
+    font-size: 0.95rem;
+}
+
+/* ---------- Progress ---------- */
+
+.waxing-progress {
+    margin-bottom: 24px;
+}
+
+.waxing-progress-bar {
+    height: 6px;
+    background: var(--wx-border);
+    border-radius: 999px;
+    overflow: hidden;
+}
+
+.waxing-progress-fill {
+    display: block;
+    height: 100%;
+    width: 0;
+    background: var(--wx-accent);
+    border-radius: 999px;
+    transition: width 0.3s ease;
+}
+
+.waxing-progress-text {
+    margin: 8px 0 0;
+    font-size: 0.85rem;
+    color: var(--wx-muted);
+}
+
+/* ---------- Steps & layout ---------- */
+
+.waxing-step-title {
+    margin: 0 0 4px;
+    font-size: 1.15rem;
+}
+
+.waxing-step-desc {
+    margin: 0 0 20px;
+    color: var(--wx-muted);
+    font-size: 0.9rem;
+}
+
+.waxing-grid {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 18px;
+}
+
+.waxing-group-title {
+    grid-column: 1 / -1;
+    margin: 8px 0 -6px;
+    font-size: 0.95rem;
+    font-weight: 600;
+}
+
+.waxing-field {
+    min-width: 0;
+}
+
+/* Conditional follow-ups are hidden until their trigger is answered.
+   Marked !important because the grid rules in the wider-viewport media query
+   land later in the cascade with higher specificity; only `display` is at
+   stake here, so this can't mask a layout rule. */
+.waxing-patient-form [hidden] {
+    display: none !important;
+}
+
+/* ---------- Labels & inputs ---------- */
+
+.waxing-label {
+    display: block;
+    margin-bottom: 6px;
+    font-weight: 600;
+    font-size: 0.92rem;
+}
+
+.waxing-req {
+    color: var(--wx-accent);
+}
+
+.waxing-patient-form input[type="text"],
+.waxing-patient-form input[type="email"],
+.waxing-patient-form input[type="tel"],
+.waxing-patient-form input[type="date"],
+.waxing-patient-form input[type="number"],
+.waxing-patient-form textarea {
+    width: 100%;
+    min-height: 46px;
+    padding: 11px 13px;
+    border: 2px solid var(--wx-border);
+    border-radius: 8px;
+    background: #fff;
+    /* 16px minimum prevents iOS Safari from zooming the viewport on focus. */
+    font-size: 16px;
+    font-family: inherit;
+    color: inherit;
+    transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.waxing-patient-form textarea {
+    min-height: 84px;
+    resize: vertical;
+}
+
+.waxing-patient-form input:focus,
+.waxing-patient-form textarea:focus {
+    outline: none;
+    border-color: var(--wx-accent);
+    box-shadow: 0 0 0 3px var(--wx-accent-soft);
+}
+
+.waxing-patient-form input[readonly] {
+    background: var(--wx-subtle);
+    color: var(--wx-muted);
+}
+
+/* ---------- Yes / No pills & radios ---------- */
+
+.waxing-yesno,
+.waxing-checkgroup {
+    border: 0;
+    margin: 0;
+    padding: 0;
+    min-width: 0;
+}
+
+.waxing-yesno .waxing-label,
+.waxing-checkgroup .waxing-label {
+    padding: 0;
+}
+
+.waxing-yesno-options {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+}
+
+.waxing-pill {
+    position: relative;
+    display: inline-flex;
+}
+
+.waxing-pill input {
+    position: absolute;
+    opacity: 0;
+    width: 100%;
+    height: 100%;
+    margin: 0;
+    cursor: pointer;
+}
+
+.waxing-pill span {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 76px;
+    min-height: 44px;
+    padding: 0 18px;
+    border: 2px solid var(--wx-border);
+    border-radius: 999px;
+    background: #fff;
+    font-size: 0.95rem;
+    font-weight: 500;
+    transition: all 0.15s ease;
+}
+
+.waxing-pill input:checked + span {
+    border-color: var(--wx-accent);
+    background: var(--wx-accent);
+    color: #fff;
+}
+
+.waxing-pill input:focus-visible + span {
+    box-shadow: 0 0 0 3px var(--wx-accent-soft);
+}
+
+/* ---------- Checkbox grid ---------- */
+
+.waxing-checkgrid {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 4px;
+}
+
+.waxing-check {
+    display: flex;
+    align-items: flex-start;
+    gap: 11px;
+    min-height: 44px;
+    padding: 9px 10px;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 0.95rem;
+    transition: background 0.15s ease;
+}
+
+.waxing-check:hover {
+    background: var(--wx-subtle);
+}
+
+.waxing-check input {
+    flex: none;
+    width: 20px;
+    height: 20px;
+    margin: 2px 0 0;
+    accent-color: var(--wx-accent);
+}
+
+.waxing-check--standalone {
+    padding-left: 0;
+}
+
+.waxing-check--accept {
+    align-items: flex-start;
+    border: 2px solid var(--wx-border);
+    padding: 14px;
+    background: var(--wx-accent-tint);
+}
+
+/* ---------- Waiver text ---------- */
+
+.waxing-waiver-text {
+    max-height: 320px;
+    overflow-y: auto;
+    padding: 18px;
+    margin-bottom: 20px;
+    border: 1px solid var(--wx-border);
+    border-radius: 8px;
+    background: var(--wx-accent-tint);
+    font-size: 0.9rem;
+    line-height: 1.65;
+    color: var(--wx-text);
+    -webkit-overflow-scrolling: touch;
+}
+
+.waxing-waiver-text p {
+    margin: 0 0 12px;
+}
+
+.waxing-waiver-text p:last-child {
+    margin-bottom: 0;
+}
+
+.waxing-signature {
+    font-family: "Segoe Script", "Bradley Hand", cursive;
+    font-size: 18px !important;
+}
+
+/* ---------- Errors ---------- */
+
+.waxing-field-error {
+    display: none;
+    margin-top: 5px;
+    font-size: 0.82rem;
+    color: var(--wx-error);
+}
+
+.waxing-field.has-error .waxing-field-error {
+    display: block;
+}
+
+.waxing-field.has-error input,
+.waxing-field.has-error textarea {
+    border-color: var(--wx-error);
+}
+
+.waxing-field.has-error .waxing-pill span,
+.waxing-field.has-error .waxing-check--accept {
+    border-color: var(--wx-error);
+}
+
+.waxing-form-message {
+    margin-top: 18px;
+    padding: 12px 14px;
+    border-radius: 8px;
+    background: #fff5f5;
+    color: var(--wx-error);
+    font-size: 0.9rem;
+}
+
+/* ---------- Nav & buttons ---------- */
+
+.waxing-form-nav {
+    display: flex;
+    gap: 10px;
+    margin-top: 26px;
+    padding-top: 20px;
+    border-top: 1px solid var(--wx-border);
+}
+
+.waxing-btn {
+    flex: 1;
+    min-height: 50px;
+    padding: 12px 22px;
+    border: 2px solid transparent;
+    border-radius: 8px;
+    background: var(--wx-accent);
+    color: #fff;
+    font-size: 1rem;
+    font-weight: 600;
+    font-family: inherit;
+    cursor: pointer;
+    transition: opacity 0.15s ease, background 0.15s ease;
+}
+
+.waxing-btn:hover:not(:disabled) {
+    background: var(--wx-accent-dark);
+}
+
+.waxing-btn:disabled {
+    background: var(--wx-accent-muted);
+    cursor: not-allowed;
+}
+
+.waxing-btn--ghost {
+    flex: 0 0 auto;
+    min-width: 100px;
+    background: var(--wx-subtle);
+    border-color: var(--wx-border);
+    color: var(--wx-accent);
+}
+
+.waxing-btn--ghost:hover:not(:disabled) {
+    background: var(--wx-accent-tint);
+}
+
+.waxing-btn[hidden] {
+    display: none;
+}
+
+.waxing-spinner {
+    display: inline-block;
+    width: 16px;
+    height: 16px;
+    margin-left: 8px;
+    border: 2px solid rgba(255, 255, 255, 0.4);
+    border-top-color: #fff;
+    border-radius: 50%;
+    vertical-align: -3px;
+    animation: waxing-spin 0.7s linear infinite;
+}
+
+.waxing-spinner[hidden] {
+    display: none;
+}
+
+@keyframes waxing-spin {
+    to { transform: rotate(360deg); }
+}
+
+/* ---------- Success ---------- */
+
+.waxing-form-success {
+    text-align: center;
+    padding: 40px 20px;
+}
+
+.waxing-form-success[hidden] {
+    display: none;
+}
+
+.waxing-success-icon {
+    width: 60px;
+    height: 60px;
+    margin: 0 auto 16px;
+    border-radius: 50%;
+    background: #d4edda;
+    color: #155724;
+    font-size: 30px;
+    line-height: 60px;
+}
+
+/* ---------- Wider viewports ---------- */
+
+@media (min-width: 640px) {
+    .waxing-patient-form {
+        padding: 32px;
+    }
+
+    .waxing-form-title {
+        font-size: 1.75rem;
+    }
+
+    .waxing-grid {
+        grid-template-columns: repeat(6, 1fr);
+        gap: 20px;
+    }
+
+    .waxing-field--full   { grid-column: span 6; }
+    .waxing-field--half   { grid-column: span 3; }
+    .waxing-field--third  { grid-column: span 2; }
+
+    /* Long-form question types always take the full row so their answer
+       controls don't get squeezed into a narrow column. */
+    .waxing-field--yesno,
+    .waxing-field--radio,
+    .waxing-field--checkboxes,
+    .waxing-field--textarea,
+    .waxing-field--checkbox_single {
+        grid-column: span 6;
+    }
+
+    .waxing-field--yesno.waxing-field--half,
+    .waxing-field--radio.waxing-field--half {
+        grid-column: span 3;
+    }
+
+    .waxing-checkgrid {
+        grid-template-columns: repeat(2, 1fr);
+    }
+
+    .waxing-form-nav {
+        justify-content: flex-end;
+    }
+
+    .waxing-btn {
+        flex: 0 0 auto;
+        min-width: 150px;
+    }
+}
+
+@media (min-width: 900px) {
+    .waxing-checkgrid {
+        grid-template-columns: repeat(3, 1fr);
+    }
+}
+
+/* ---------- Secondary link (patient-facing page) ---------- */
+
+.waxing-secondary-link {
+    max-width: 780px;
+    margin: 18px auto 0;
+    padding: 0 16px;
+    text-align: center;
+    font-size: 0.9rem;
+    color: var(--wx-muted);
+}
+
+.waxing-secondary-link a {
+    color: var(--wx-accent);
+    text-decoration: underline;
+}
+
+/* ---------- Kiosk (front desk) ---------- */
+
+.waxing-kiosk {
+    /* Same booking-modal palette as the form wrapper above. */
+    --wx-accent: #2383f0;
+    --wx-accent-dark: #1b6ac8;
+    --wx-border: #e1e8f0;
+    --wx-text: #333;
+    --wx-muted: #64748b;
+
+    max-width: 900px;
+    margin: 0 auto;
+    padding: 0 16px;
+    box-sizing: border-box;
+}
+
+.waxing-kiosk [hidden] {
+    display: none !important;
+}
+
+.waxing-kiosk-choose {
+    text-align: center;
+    padding: 32px 0;
+}
+
+.waxing-kiosk-title {
+    margin: 0 0 8px;
+    font-size: 1.9rem;
+}
+
+.waxing-kiosk-intro {
+    margin: 0 0 32px;
+    color: var(--wx-muted);
+}
+
+.waxing-kiosk-options {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 16px;
+}
+
+/* Deliberately oversized: these are tapped at arm's length on a counter
+   iPad, often by someone who has not seen the screen before. */
+.waxing-kiosk-card {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    min-height: 130px;
+    padding: 28px 24px;
+    border: 2px solid var(--wx-accent);
+    border-radius: 14px;
+    background: var(--wx-accent);
+    color: #fff;
+    font-family: inherit;
+    text-align: left;
+    cursor: pointer;
+    transition: transform 0.12s ease, opacity 0.12s ease;
+}
+
+.waxing-kiosk-card:active {
+    transform: scale(0.985);
+}
+
+.waxing-kiosk-card--alt {
+    background: #fff;
+    color: var(--wx-text);
+    border-color: var(--wx-border);
+}
+
+.waxing-kiosk-card-label {
+    font-size: 1.35rem;
+    font-weight: 700;
+}
+
+.waxing-kiosk-card-desc {
+    font-size: 0.95rem;
+    opacity: 0.85;
+}
+
+.waxing-kiosk-back {
+    margin-bottom: 16px;
+    padding: 12px 18px;
+    min-height: 44px;
+    border: 2px solid var(--wx-border);
+    border-radius: 8px;
+    background: var(--wx-subtle);
+    color: var(--wx-accent);
+    font-family: inherit;
+    font-size: 0.95rem;
+    cursor: pointer;
+}
+
+@media (min-width: 700px) {
+    .waxing-kiosk-options {
+        grid-template-columns: 1fr 1fr;
+    }
+}
+
+/* ---------- Print (staff keeping a paper copy) ---------- */
+
+@media print {
+    .waxing-progress,
+    .waxing-form-nav {
+        display: none;
+    }
+
+    /* Expand every step so a printed copy shows the whole record, not just
+       whichever step happened to be on screen. */
+    .waxing-patient-form .waxing-step[hidden] {
+        display: block !important;
+    }
+}
+
+/* ---------------------------------------------------------------
+   Post-booking prompt (WooCommerce thank-you page)
+   Same palette as the forms it links to, so checkout and paperwork
+   read as one flow rather than two bolted-together plugins.
+   --------------------------------------------------------------- */
+.waxing-intake-prompt {
+    --wx-accent: #2383f0;
+    --wx-accent-dark: #1b6ac8;
+    --wx-accent-tint: #f0f7ff;
+    --wx-border: #e1e8f0;
+    --wx-text: #333;
+    --wx-muted: #64748b;
+
+    margin: 32px 0;
+    padding: 28px 24px;
+    background: var(--wx-accent-tint);
+    border: 2px solid var(--wx-border);
+    border-radius: 12px;
+    color: var(--wx-text);
+}
+
+.waxing-intake-prompt-body {
+    max-width: 560px;
+}
+
+.waxing-intake-prompt-title {
+    margin: 0 0 10px;
+    font-size: 20px;
+    line-height: 1.3;
+    color: var(--wx-text);
+}
+
+.waxing-intake-prompt-text {
+    margin: 0 0 20px;
+    font-size: 16px;
+    line-height: 1.55;
+    color: var(--wx-text);
+}
+
+.waxing-intake-prompt-btn {
+    display: inline-block;
+    padding: 14px 26px;
+    min-height: 44px;
+    background: var(--wx-accent);
+    color: #fff;
+    font-size: 16px;
+    font-weight: 600;
+    line-height: 1.2;
+    text-decoration: none;
+    border-radius: 8px;
+    transition: background 0.2s ease;
+}
+
+.waxing-intake-prompt-btn:hover,
+.waxing-intake-prompt-btn:focus {
+    background: var(--wx-accent-dark);
+    color: #fff;
+    text-decoration: none;
+}
+
+.waxing-intake-prompt-note {
+    margin: 14px 0 0;
+    font-size: 14px;
+    line-height: 1.5;
+    color: var(--wx-muted);
+}
+
+@media (max-width: 600px) {
+    .waxing-intake-prompt {
+        padding: 22px 18px;
+    }
+
+    /* Full-width tap target on phones, where most clients land after paying. */
+    .waxing-intake-prompt-btn {
+        display: block;
+        text-align: center;
+    }
+}
